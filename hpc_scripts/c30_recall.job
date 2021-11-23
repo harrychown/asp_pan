@@ -21,9 +21,8 @@ echo $PREFIX
 conda activate prothint_env
 mkdir recall_ep
 export PATH="/mnt/iusers01/pb01/f99731hc/ProtHint/dependencies/GeneMarkES/gmes_linux_64/:$PATH"
-python ~/ProtHint/bin/prothint.py --threads $NSLOTS --fungus ./mask_$PREFIX/$PREFIX.contigs.fa.masked ~/scratch/imperial/proteins.fasta
 # Make gene calls using GeneMark-EP+
-~/gmes_linux_64/gmes_petap.pl --cores $NSLOTS --EP prothint.gff --evidence evidence.gff --max_intron 200 --max_intergenic 100000 --sequence ./mask_$PREFIX/$PREFIX.contigs.fa.masked --min_contig=10000 --fungus --work-dir ./recall_ep
+~/gmes_linux_64/gmes_petap.pl --cores $NSLOTS --EP prothint.gff --evidence evidence.gff --max_intron 200 --max_intergenic 100000 --sequence ./mask_$PREFIX/$PREFIX.contigs.fa.masked --min_contig=10000 --fungus --work_dir ./recall_ep
 
 #### EXTRACT GENE FASTA ####
 conda activate gffread_env
