@@ -3,6 +3,8 @@
 #$ -t 1-1
 #$ -N recallc30
 #$ -pe smp.pe 12
+#$ -m e
+#$ -M harry.chown@postgrad.manchester.ac.uk
 module load apps/binapps/anaconda3/2020.07
 module load tools/env/proxy2 
 
