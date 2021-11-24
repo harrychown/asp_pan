@@ -1,0 +1,45 @@
+==============================================================
+qname        vbigmem.q           
+hostname     node787.pri.csf3.alces.network
+group        pb01                
+owner        f99731hc            
+project      pb01.prj            
+department   defaultdepartment   
+jobname      oct                 
+jobnumber    3254992             
+taskid       undefined
+account      sge                 
+priority     0                   
+qsub_time    Fri Oct 29 11:49:45 2021
+start_time   Fri Oct 29 11:49:47 2021
+end_time     Sun Oct 31 06:53:01 2021
+granted_pe   smp.pe              
+slots        32                  
+failed       0    
+exit_status  0                   
+ru_wallclock 158594s
+ru_utime     134039.947s
+ru_stime     24147.814s
+ru_maxrss    1.159GB
+ru_ixrss     0.000B
+ru_ismrss    0.000B
+ru_idrss     0.000B
+ru_isrss     0.000B
+ru_minflt    31604468592         
+ru_majflt    51                  
+ru_nswap     0                   
+ru_inblock   113180768           
+ru_oublock   46373712            
+ru_msgsnd    0                   
+ru_msgrcv    0                   
+ru_nsignals  0                   
+ru_nvcsw     12598               
+ru_nivcsw    89366               
+cpu          158187.761s
+mem          161134.268TBs
+io           128.479GB
+iow          0.000s
+maxvmem      1.159TB
+arid         undefined
+ar_sub_time  undefined
+category     -U mem1024.userset,mem1500.userset -u f99731hc -l mem1500=TRUE -pe smp.pe 32
