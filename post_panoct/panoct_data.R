@@ -3,9 +3,16 @@ library("tidyverse")
 library("micropan")
 library("ggplot2")
 library("VennDiagram")
+# Read config file for input/output directories
+directory_configuration <- readLines("directory.config")
+in_dir <- directory_configuration[1]
+out_dir <- directory_configuration[2]
+
+setwd(in_dir)
 raw_data <- read.table("matchtable.txt")[,-1]
 raw_centroids <- readLines("centroids.fasta")
-raw_meta <- read.csv("/home/harry/Documents/imperial/raw_metadata.csv")
+raw_meta <- read.csv("raw_metadata.csv")
+
 essential_centroids <- readLines("/home/harry/Documents/imperial/essential.centroids")
 ### ADD HEADER/ROW NAMES BASED ON CENTROIDS ###
 # Change row names to centroid index
