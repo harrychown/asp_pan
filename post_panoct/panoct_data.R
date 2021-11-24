@@ -1,8 +1,11 @@
 # PANOCT HISTOGRAMS
+
 library("tidyverse")
 library("micropan")
 library("ggplot2")
 library("VennDiagram")
+library("rstudioapi")   
+setwd(dirname(getActiveDocumentContext()$path))     
 # Read config file for input/output directories
 directory_configuration <- readLines("directory.config")
 in_dir <- directory_configuration[1]
@@ -115,13 +118,14 @@ trait2_Sitr_Ritr <- ordered_meta$itr
 # Known = 0
 # Unknown = 1
 # Separate the itra-resistant isolates
-itra_resistant <- ordered_meta[which(ordered_meta$itr == 1),]
+itra_resistant <- which(ordered_meta$itr == 1)
 # Identify the wildtypes to substitute later
-itra_R_U <- which(itra_resistant$AMR == "Wildtype")
-itra_NA <- which(itra_resistant$AMR == "NA")
-trait3_RitrK_RitrU <- rep(0, length(itra_resistant$AMR))
+itra_R_U <- which(ordered_meta$AMR == "Wildtype" & ordered_meta$itr == 1)
+itra_R_K <- which(ordered_meta$AMR != "Wildtype" & ordered_meta$itr == 1)
+trait3_RitrK_RitrU <- rep(NA, nrow(ordered_meta))
 trait3_RitrK_RitrU[itra_R_U] <-  1
-trait3_RitrK_RitrU[itra_NA] <-  "NA"
+trait3_RitrK_RitrU[itra_R_K] <- 0
+
 # Generate data for trait 4: Voriconazole susceptible vs resistant
 # Vor sus = 0
 # Vor res = 1
@@ -130,14 +134,14 @@ trait4_Svor_Rvor <- ordered_meta$vor
 # Generate data for trait 5: Vor-resistant known vs unknown
 # Known = 0
 # Unknown = 1
-# Separate the vor-resistant isolates
-vor_resistant <- ordered_meta[which(ordered_meta$vor == 1),]
+
 # Identify the wildtypes to substitute later
-vor_R_U <- which(vor_resistant$AMR == "Wildtype")
-vor_NA <- which(vor_resistant$AMR == "NA")
-trait5_RvorK_RvorU <- rep(0, length(vor_resistant$AMR))
+vor_R_U <- which(ordered_meta$AMR == "Wildtype" & ordered_meta$vor == 1)
+vor_R_K <- which(ordered_meta$AMR != "Wildtype" & ordered_meta$vor == 1)
+trait5_RvorK_RvorU <- rep(NA, nrow(ordered_meta))
 trait5_RvorK_RvorU[vor_R_U] <-  1
-trait5_RvorK_RvorU[vor_NA] <-  "NA"
+trait5_RvorK_RvorU[vor_R_K] <-  0
+
 # Generate data for trait 6: posiconazole susceptible vs resistant
 # Pos sus = 0
 # Pos res = 1
@@ -147,32 +151,47 @@ trait6_Spos_Rpos <- ordered_meta$pos
 # Known = 0
 # Unknown = 1
 # Separate the Pos-resistant isolates
-pos_resistant <- ordered_meta[which(ordered_meta$pos == 1),]
+pos_resistant <- which(ordered_meta$pos == 1)
+pos_susceptible <- which(ordered_meta$pos == 0)
 # Identify the wildtypes to substitute later
-pos_R_U <- which(pos_resistant$AMR == "Wildtype")
-pos_NA <- which(pos_resistant$AMR == "NA")
-trait7_RposK_RposU <- rep(0, length(pos_resistant$AMR))
-trait7_RposK_RposU[pos_R_U] <-  1
-trait7_RposK_RposU[pos_NA] <-  "NA"
+pos_R_U <- which(ordered_meta$AMR == "Wildtype" & ordered_meta$pos == 1)
+pos_R_K <- which(ordered_meta$AMR != "Wildtype" & ordered_meta$pos == 1)
+trait7_RposK_RposU <- rep(NA, nrow(ordered_meta))
+trait7_RposK_RposU[pos_R_U] <- 1
+trait7_RposK_RposU[pos_R_K] <- 0
 
 # Generate data for trait 8: All-azole susceptible vs resistant
 # All sus = 0
 # All res = 1
 azole_sum <- rowSums(ordered_meta[,21:23])
 azole_res <- which(azole_sum == 3)
-azole_NA <- is.na(azole_sum)
 azole_sus <- which(azole_sum == 0)
-trait8_Sall_Rall
+trait8_Sall_Rall <- rep(NA, nrow(ordered_meta))
+trait8_Sall_Rall[azole_sus] <- 0
+trait8_Sall_Rall[azole_res] <- 1
 
-# Generate data for trait 7: All-resistant known vs unknown
+# Generate data for trait 9: All-resistant known vs unknown
 # Known = 0
 # Unknown = 1
-# Separate the Pos-resistant isolates
-pos_resistant <- ordered_meta[which(ordered_meta$pos == 1),]
 # Identify the wildtypes to substitute later
-pos_R_U <- which(pos_resistant$AMR == "Wildtype")
-trait7_RposK_RposU <- rep(0, length(pos_resistant$AMR))
-trait7_RposK_RposU[pos_R_U] <-  1
+pos_R_U <- which(ordered_meta$AMR == "Wildtype" & azole_sum == 3)
+pos_R_K <- which(ordered_meta$AMR != "Wildtype" & azole_sum == 3)
+trait9_RallK_RallU <- rep(NA, nrow(ordered_meta))
+trait9_RallK_RallU[pos_R_U] <-  1
+trait9_RallK_RallU[pos_R_K] <-  0
+
+# Build the traits file
+traits_data <- data.frame("trait1_cladeA_cladeB" = trait1_cladeA_cladeB,
+                           "trait2_itra_sensitive_resistant" = trait2_Sitr_Ritr,
+                           "trait3_itraresistant_known_unknown" = trait3_RitrK_RitrU,
+                           "trait4_vor_sensitive_resistant" = trait4_Svor_Rvor,
+                           "trait5_vorresistant_known_unknown" = trait5_RvorK_RvorU,
+                           "trait6_pos_sensitive_resistant" = trait6_Spos_Rpos,
+                           "trait7_posresistant_known_unknown" = trait7_RposK_RposU,
+                           "trait8_all_sensitive_resistant" = trait8_Sall_Rall,
+                           "trait9_allresistant_known_unknown" = trait9_RallK_RallU)
+traits_data <- rownames(ordered_meta$Pangenome.id)
+write.csv(traits_data, paste(c(out_dir,"/traits_data.csv"), sep="", collapse=""), row.names=T)
 
 ## CHECK ESSENTIAL GENE PRESENCE ##
 essential_freq <- frequency[essential_centroids]
