@@ -12,8 +12,8 @@ setwd(in_dir)
 raw_data <- read.table("matchtable.txt")[,-1]
 raw_centroids <- readLines("centroids.fasta")
 raw_meta <- read.csv("raw_metadata.csv")
+essential_centroids <- readLines("essential.centroids")
 
-essential_centroids <- readLines("/home/harry/Documents/imperial/essential.centroids")
 ### ADD HEADER/ROW NAMES BASED ON CENTROIDS ###
 # Change row names to centroid index
 centroid_names <- c()
@@ -45,6 +45,134 @@ core_data <- binary_data[rowSums(binary_data == 0)==0, , drop = FALSE]
 frequency <- rowSums(binary_data)
 names(frequency) <- centroid_names
 #write.csv(frequency, "/home/harry/Documents/imperial/1_11_panoct/gene_freq.csv" )
+
+## CREATE DATA TO MIMIC ROARY OUTPUT ##
+# Replace lacking genes with blank space
+data_blanked <- raw_data
+data_blanked[data_blanked=="----------"]<-""
+db_isolates <- colnames(data_blanked)
+mock_data <- data.frame("Gene"=rep(0, nrow(data_blanked)),
+                        "Non-unique Gene name"=rep(0, nrow(data_blanked)),
+                        "Annotation"=rep(0, nrow(data_blanked)),
+                        "No. isolates"=rep(0, nrow(data_blanked)),
+                        "No. sequences"=rep(0, nrow(data_blanked)),
+                        "Avg sequences per isolate"=rep(0, nrow(data_blanked)),
+                        "Genome Fragment"=rep(0, nrow(data_blanked)),
+                        "Order within Fragment"=rep(0, nrow(data_blanked)),
+                        "Accessory Fragment"=rep(0, nrow(data_blanked)),
+                        "Accessory Order with Fragment"=rep(0, nrow(data_blanked)),
+                        "QC"=rep(0, nrow(data_blanked)),
+                        "Min group size nuc"=rep(0, nrow(data_blanked)),
+                        "Max group size nuc"=rep(0, nrow(data_blanked)),
+                        "Avg group size nuc"=rep(0, nrow(data_blanked)))
+mock_roary <- cbind(mock_data, data_blanked)
+mock_roary$Gene <- rownames(data_blanked)
+write.csv(mock_roary, paste(c(out_dir,"/mock_roary.csv"), sep="", collapse=""), row.names=F)
+
+
+## CLEAN METADATA ##
+# Remove ">" or "<" strings from mic
+# order: itr, vor, pos
+clean_meta <- raw_meta
+drug_name <- c("itr", "vor", "pos")
+drug_col <- 15:17
+drug_mic <- c(2, 2, 0.5)
+for(i in 1:length(drug_mic)){
+  NA_id <- which(clean_meta[,drug_col[i]] == "ND")
+  clean_meta[,drug_col[i]] <-  gsub("<","",as.character(clean_meta[,drug_col[i]]))
+  clean_meta[,drug_col[i]] <-  gsub(">","",as.character(clean_meta[,drug_col[i]]))
+  clean_meta[,drug_col[i]] <-  as.numeric(clean_meta[,drug_col[i]])
+  resistant_id <- which(clean_meta[,drug_col[i]] >= drug_mic[i])
+  
+  new_col <- ncol(clean_meta) + 1
+  clean_meta[,new_col] <- rep(0, nrow(clean_meta))
+  clean_meta[NA_id,new_col] <- NA
+  clean_meta[resistant_id,new_col] <- 1
+  
+}
+colnames(clean_meta) <- c(colnames(raw_meta), drug_name)
+
+
+write.csv(clean_meta, paste(c(out_dir,"/clean_meta.csv"), sep="", collapse=""), row.names=F)
+
+## CREATE PHENOTYPE DATA FOR SCOARY INPUT ##
+# Re-index metadata to match "mock roary"
+ordered_meta <- clean_meta[ match(clean_meta$Pangenome.id, colnames(data_blanked)), ]
+#strain   trait1    trait2
+# Generate data for trait 1: Clade A vs Clade B
+# Clade A = 0
+# Clade B = 1
+trait1_cladeA_cladeB <- ordered_meta$Clade
+trait1_cladeA_cladeB[trait1_cladeA_cladeB == "A"] <- 0
+trait1_cladeA_cladeB[trait1_cladeA_cladeB == "B"] <- 1
+
+# Generate data for trait 2: Itraconazole susceptible vs resistant
+# Itra sus = 0
+# Itra res = 1
+trait2_Sitr_Ritr <- ordered_meta$itr
+
+# Generate data for trait 3: Itra-resistant known vs unknown
+# Known = 0
+# Unknown = 1
+# Separate the itra-resistant isolates
+itra_resistant <- ordered_meta[which(ordered_meta$itr == 1),]
+# Identify the wildtypes to substitute later
+itra_R_U <- which(itra_resistant$AMR == "Wildtype")
+itra_NA <- which(itra_resistant$AMR == "NA")
+trait3_RitrK_RitrU <- rep(0, length(itra_resistant$AMR))
+trait3_RitrK_RitrU[itra_R_U] <-  1
+trait3_RitrK_RitrU[itra_NA] <-  "NA"
+# Generate data for trait 4: Voriconazole susceptible vs resistant
+# Vor sus = 0
+# Vor res = 1
+trait4_Svor_Rvor <- ordered_meta$vor
+
+# Generate data for trait 5: Vor-resistant known vs unknown
+# Known = 0
+# Unknown = 1
+# Separate the vor-resistant isolates
+vor_resistant <- ordered_meta[which(ordered_meta$vor == 1),]
+# Identify the wildtypes to substitute later
+vor_R_U <- which(vor_resistant$AMR == "Wildtype")
+vor_NA <- which(vor_resistant$AMR == "NA")
+trait5_RvorK_RvorU <- rep(0, length(vor_resistant$AMR))
+trait5_RvorK_RvorU[vor_R_U] <-  1
+trait5_RvorK_RvorU[vor_NA] <-  "NA"
+# Generate data for trait 6: posiconazole susceptible vs resistant
+# Pos sus = 0
+# Pos res = 1
+trait6_Spos_Rpos <- ordered_meta$pos
+
+# Generate data for trait 7: Pos-resistant known vs unknown
+# Known = 0
+# Unknown = 1
+# Separate the Pos-resistant isolates
+pos_resistant <- ordered_meta[which(ordered_meta$pos == 1),]
+# Identify the wildtypes to substitute later
+pos_R_U <- which(pos_resistant$AMR == "Wildtype")
+pos_NA <- which(pos_resistant$AMR == "NA")
+trait7_RposK_RposU <- rep(0, length(pos_resistant$AMR))
+trait7_RposK_RposU[pos_R_U] <-  1
+trait7_RposK_RposU[pos_NA] <-  "NA"
+
+# Generate data for trait 8: All-azole susceptible vs resistant
+# All sus = 0
+# All res = 1
+azole_sum <- rowSums(ordered_meta[,21:23])
+azole_res <- which(azole_sum == 3)
+azole_NA <- is.na(azole_sum)
+azole_sus <- which(azole_sum == 0)
+trait8_Sall_Rall
+
+# Generate data for trait 7: All-resistant known vs unknown
+# Known = 0
+# Unknown = 1
+# Separate the Pos-resistant isolates
+pos_resistant <- ordered_meta[which(ordered_meta$pos == 1),]
+# Identify the wildtypes to substitute later
+pos_R_U <- which(pos_resistant$AMR == "Wildtype")
+trait7_RposK_RposU <- rep(0, length(pos_resistant$AMR))
+trait7_RposK_RposU[pos_R_U] <-  1
 
 ## CHECK ESSENTIAL GENE PRESENCE ##
 essential_freq <- frequency[essential_centroids]
@@ -173,31 +301,6 @@ p<-ggplot(data = strain_specific_frequency_df, aes(x=V2)) +
 p 
 
 dev.off()
-
-## CLEAN METADATA ##
-# Remove ">" or "<" strings from mic
-# order: itr, vor, pos
-clean_meta <- raw_meta
-drug_name <- c("itr", "vor", "pos")
-drug_col <- 15:17
-drug_mic <- c(2, 2, 0.5)
-for(i in 1:length(drug_mic)){
-  NA_id <- which(clean_meta[,drug_col[i]] == "ND")
-  clean_meta[,drug_col[i]] <-  gsub("<","",as.character(clean_meta[,drug_col[i]]))
-  clean_meta[,drug_col[i]] <-  gsub(">","",as.character(clean_meta[,drug_col[i]]))
-  clean_meta[,drug_col[i]] <-  as.numeric(clean_meta[,drug_col[i]])
-  resistant_id <- which(clean_meta[,drug_col[i]] >= drug_mic[i])
-  
-  new_col <- ncol(clean_meta) + 1
-  clean_meta[,new_col] <- rep(0, nrow(clean_meta))
-  clean_meta[NA_id,new_col] <- NA
-  clean_meta[resistant_id,new_col] <- 1
-  
-}
-colnames(clean_meta) <- c(colnames(raw_meta), drug_name)
-
-
-write.csv(clean_meta, "/home/harry/Documents/imperial/1_11_panoct/clean_meta.csv", row.names=F)
 
 ## SUBSET BASED ON METADATA ##
 # Make function to subset things that are  not in a vector
