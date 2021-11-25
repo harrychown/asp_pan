@@ -1,0 +1,91 @@
+#!/bin/bash --login
+#$ -cwd
+#$ -t 1-218
+#$ -N build_genome2
+#$ -pe smp.pe 12
+module load apps/binapps/anaconda3/2020.07
+module load tools/env/proxy2 
+
+conda activate imperial
+
+FOLDER=`awk "NR==$SGE_TASK_ID" folder_paths.txt`
+
+# Enter the isolate folder
+cd $FOLDER
+# Extract prefix
+PREFIX=$(echo $FOLDER | rev | cut -d"/" -f1 | rev)
+echo $PREFIX
+
+#### QC ####
+# Remove old data
+if [ -e ${PREFIX}_1_qc.fastq ]
+then
+	echo "Overwriting old QC files.."	
+	rm ${PREFIX}_*_*qc.fastq
+else
+	echo "Generating new QC files..."
+fi
+
+# Trim sequence pairs	
+trimmomatic PE -threads $NSLOTS ./${PREFIX}_1.fastq.gz ./${PREFIX}_2.fastq.gz \
+		${PREFIX}_1_qc.fastq ${PREFIX}_1_unqc.fastq \
+		${PREFIX}_2_qc.fastq ${PREFIX}_2_unqc.fastq \
+		ILLUMINACLIP:/mnt/iusers01/pb01/f99731hc/TruSeq3-PE.fa:2:40:15 TOPHRED33 LEADING:20 \
+		TRAILING:20 SLIDINGWINDOW:2:20 MINLEN:25 \
+		AVGQUAL:20
+
+READ1=$(echo $(cat ${PREFIX}_1_qc.fastq | wc -l)/4 | bc)
+READ2=$(echo $(cat ${PREFIX}_2_qc.fastq | wc -l)/4 | bc)
+
+
+#### ASSEMBLE GENOME ####
+# Assemble genomes with megahit, removing directory if previously ran
+if [ -e ./megahit_out/log ] 
+then
+	echo "Overwriting old assembly..."	
+	rm -r ./megahit_out
+else
+	echo "Generating new assembly..."
+fi
+megahit -t $NSLOTS --no-mercy -1 "${PREFIX}_1_qc.fastq" -2 "${PREFIX}_2_qc.fastq" --out-prefix $PREFIX -o megahit_$PREFIX
+echo "Genome size:" >> $PREFIX.log
+GS=$(grep -v ">" ./megahit_$PREFIX/$PREFIX.contigs.fa | wc -c) >> $PREFIX.log
+
+#### MASK GENOME ####
+conda activate rmask
+~/RepeatMasker/RepeatMasker -pa $[NSLOTS / 4] -species 'Aspergillus fumigatus' -s -no_is -cutoff 255 -frag 20000 ./megahit_$PREFIX/$PREFIX.contigs.fa -dir ./mask_$PREFIX/
+echo "Number of masked bases:" >> $PREFIX.log
+MASK=$(grep -c "N" ./mask_$PREFIX/$PREFIX.contigs.fa.masked) >> $PREFIX.log
+
+#### ANNOTATION ####
+# Predict protein coding sequences using ProtHint
+conda activate prothint_env
+export PATH="/mnt/iusers01/pb01/f99731hc/ProtHint/dependencies/GeneMarkES/gmes_linux_64/:$PATH"
+python ~/ProtHint/bin/prothint.py --threads $NSLOTS --fungus ./mask_$PREFIX/$PREFIX.contigs.fa.masked ~/scratch/imperial/proteins.fasta
+# Make gene calls using GeneMark-EP+
+~/gmes_linux_64/gmes_petap.pl --cores $NSLOTS --EP prothint.gff --evidence evidence.gff --max_intron 200 --max_intergenic 100000 --sequence ./mask_$PREFIX/$PREFIX.contigs.fa.masked --min_contig=1000 --fungus 
+
+#### EXTRACT GENE FASTA ####
+conda activate gffread_env
+# Replace " " in GTF chromosome name with "_"
+awk 'BEGIN{FS=OFS="\t"} {gsub(/ /, "_", $1)} 1' genemark.gtf > updated_masked_genemark.gtf
+# Do the same for the genome
+sed 's/ /_/g' ./mask_$PREFIX/$PREFIX.contigs.fa.masked > ./updated_masked_$PREFIX.contigs.fa
+# Extract the transcripts with gffread
+gffread -w $PREFIX.masked.transcripts.fa -g ./updated_masked_$PREFIX.contigs.fa updated_masked_genemark.gtf
+
+#### CONVERT GENE TO PEP ####
+conda activate emboss_env
+transeq -sequence $PREFIX.masked.transcripts.fa -outseq $PREFIX.masked.pep.fa
+# Remove asterisks
+sed -i 's/*//g' $PREFIX.masked.pep.fa
+
+GENES=$(grep -c ">" $PREFIX.masked.transcripts.fa)
+if [ -e ~/scratch/imperial/current.log ]
+then
+	if grep -q "${PREFIX}," ~/scratch/imperial/current.log; then
+	    rm ~/scratch/imperial/current.log
+	fi
+fi
+echo "${PREFIX},${READ1},${READ2},${GS},${MASK},${GENES}" >> ~/scratch/imperial/current.log
+
