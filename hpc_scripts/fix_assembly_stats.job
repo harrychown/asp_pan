@@ -60,7 +60,6 @@ MASK=$(grep -c "N" ./mask_$PREFIX/$PREFIX.contigs.fa.masked) >> "${PREFIX}_${LOG
 
 #### OBTAIN ASSEMBLY STATISTICS ###
 conda activate bbtools
- grep '% main' | cut -d$'\t' -f2 | sed 's/%//'
 stats.sh ./mask_$PREFIX/$PREFIX.contigs.fa.masked format=2 > ./$PREFIX.stats
 STAT=$(grep '% main' ./$PREFIX.stats | cut -d$'\t' -f2 | sed 's/%//')
 MINCONTIG=0

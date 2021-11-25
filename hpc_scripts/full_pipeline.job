@@ -7,6 +7,7 @@ module load apps/binapps/anaconda3/2020.07
 module load tools/env/proxy2 
 
 conda activate imperial
+LOGDATE=$(date +'%d_%m_%Y')
 
 FOLDER=`awk "NR==$SGE_TASK_ID" folder_paths.txt`
 
@@ -48,14 +49,27 @@ else
 	echo "Generating new assembly..."
 fi
 megahit -t $NSLOTS --no-mercy -1 "${PREFIX}_1_qc.fastq" -2 "${PREFIX}_2_qc.fastq" --out-prefix $PREFIX -o megahit_$PREFIX
-echo "Genome size:" >> $PREFIX.log
-GS=$(grep -v ">" ./megahit_$PREFIX/$PREFIX.contigs.fa | wc -c) >> $PREFIX.log
+echo "Genome size:" >> "${PREFIX}_${LOGDATE}.log"
+GS=$(grep -v ">" ./megahit_$PREFIX/$PREFIX.contigs.fa | wc -c) >> "${PREFIX}_${LOGDATE}.log"
 
 #### MASK GENOME ####
 conda activate rmask
 ~/RepeatMasker/RepeatMasker -pa $[NSLOTS / 4] -species 'Aspergillus fumigatus' -s -no_is -cutoff 255 -frag 20000 ./megahit_$PREFIX/$PREFIX.contigs.fa -dir ./mask_$PREFIX/
-echo "Number of masked bases:" >> $PREFIX.log
-MASK=$(grep -c "N" ./mask_$PREFIX/$PREFIX.contigs.fa.masked) >> $PREFIX.log
+echo "Number of masked bases:" >> "${PREFIX}_${LOGDATE}.log"
+MASK=$(grep -c "N" ./mask_$PREFIX/$PREFIX.contigs.fa.masked) >> "${PREFIX}_${LOGDATE}.log"
+
+#### OBTAIN ASSEMBLY STATISTICS ###
+conda activate bbtools
+ grep '% main' | cut -d$'\t' -f2 | sed 's/%//'
+stats.sh ./mask_$PREFIX/$PREFIX.contigs.fa.masked format=2 > ./$PREFIX.stats
+STAT=$(grep '% main' ./$PREFIX.stats | cut -d$'\t' -f2 | sed 's/%//')
+MINCONTIG=0
+if [ "$STAT" lt 40 ] 
+then
+	MINCONTIG=5000
+else
+	MINCONTIG=1000
+fi
 
 #### ANNOTATION ####
 # Predict protein coding sequences using ProtHint
@@ -63,7 +77,7 @@ conda activate prothint_env
 export PATH="/mnt/iusers01/pb01/f99731hc/ProtHint/dependencies/GeneMarkES/gmes_linux_64/:$PATH"
 python ~/ProtHint/bin/prothint.py --threads $NSLOTS --fungus ./mask_$PREFIX/$PREFIX.contigs.fa.masked ~/scratch/imperial/proteins.fasta
 # Make gene calls using GeneMark-EP+
-~/gmes_linux_64/gmes_petap.pl --cores $NSLOTS --EP prothint.gff --evidence evidence.gff --max_intron 200 --max_intergenic 100000 --sequence ./mask_$PREFIX/$PREFIX.contigs.fa.masked --min_contig=1000 --fungus 
+~/gmes_linux_64/gmes_petap.pl --cores $NSLOTS --EP prothint.gff --evidence evidence.gff --max_intron 200 --max_intergenic 100000 --sequence ./mask_$PREFIX/$PREFIX.contigs.fa.masked --min_contig=1000 --min_contig_in_predict=$MINCONTIG --fungus
 
 #### EXTRACT GENE FASTA ####
 conda activate gffread_env
@@ -71,21 +85,16 @@ conda activate gffread_env
 awk 'BEGIN{FS=OFS="\t"} {gsub(/ /, "_", $1)} 1' genemark.gtf > updated_masked_genemark.gtf
 # Do the same for the genome
 sed 's/ /_/g' ./mask_$PREFIX/$PREFIX.contigs.fa.masked > ./updated_masked_$PREFIX.contigs.fa
-# Extract the transcripts with gffread
-gffread -w $PREFIX.masked.transcripts.fa -g ./updated_masked_$PREFIX.contigs.fa updated_masked_genemark.gtf
+# Extract the transcripts and peptides with gffread
+gffread -y $PREFIX.masked.pep.fa -w $PREFIX.masked.transcripts.fa -g ./updated_masked_$PREFIX.contigs.fa updated_masked_genemark.gtf
 
-#### CONVERT GENE TO PEP ####
-conda activate emboss_env
-transeq -sequence $PREFIX.masked.transcripts.fa -outseq $PREFIX.masked.pep.fa
-# Remove asterisks
-sed -i 's/*//g' $PREFIX.masked.pep.fa
 
 GENES=$(grep -c ">" $PREFIX.masked.transcripts.fa)
-if [ -e ~/scratch/imperial/current.log ]
+if [ -e "~/scratch/imperial/${LOGDATE_pipeline}.log" ]
 then
-	if grep -q "${PREFIX}," ~/scratch/imperial/current.log; then
-	    rm ~/scratch/imperial/current.log
+	if grep -q "${PREFIX}," "~/scratch/imperial/${LOGDATE_pipeline}.log"; then
+	    rm "~/scratch/imperial/${LOGDATE_pipeline}.log"
 	fi
 fi
-echo "${PREFIX},${READ1},${READ2},${GS},${MASK},${GENES}" >> ~/scratch/imperial/current.log
+echo "${PREFIX},${READ1},${READ2},${GS},${MASK},${GENES},${STAT}" >> "~/scratch/imperial/${LOGDATE_pipeline}.log"
 
