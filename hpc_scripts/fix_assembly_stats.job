@@ -107,6 +107,12 @@ sed 's/ /_/g' ./mask_$PREFIX/$PREFIX.contigs.fa.masked > ./updated_masked_$PREFI
 # Extract the transcripts and peptides with gffread
 gffread -y $PREFIX.masked.pep.fa -w $PREFIX.masked.transcripts.fa -g ./updated_masked_$PREFIX.contigs.fa updated_masked_genemark.gtf
 
+### ORGANISE PEPTIDES FOR BLAST ####
+# Incorporate prefix into FASTA header
+sed -i "s/>/>${PREFIX}/g" $PREFIX.masked.pep.fa
+# Add the peptides to file containing all peptides for BLAST analysis
+cat $PREFIX.masked.pep.fa >> "${LOGDATE}_all.pep.fa" 
+
 : <<'END'
 GENES=$(grep -c ">" $PREFIX.masked.transcripts.fa)
 if [ -e "~/scratch/imperial/${LOGDATE_pipeline}.log" ]
