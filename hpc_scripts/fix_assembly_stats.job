@@ -1,7 +1,7 @@
 #!/bin/bash --login
 #$ -cwd
 #$ -t 1-218
-#$ -N build_genome2
+#$ -N contig_update
 #$ -pe smp.pe 10
 module load apps/binapps/anaconda3/2020.07
 module load tools/env/proxy2 
