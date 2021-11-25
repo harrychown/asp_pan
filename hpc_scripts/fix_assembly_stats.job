@@ -16,7 +16,7 @@ cd $FOLDER
 # Extract prefix
 PREFIX=$(echo $FOLDER | rev | cut -d"/" -f1 | rev)
 echo $PREFIX
-
+: <<'END'
 #### QC ####
 # Remove old data
 if [ -e ${PREFIX}_1_qc.fastq ]
@@ -58,12 +58,14 @@ conda activate rmask
 echo "Number of masked bases:" >> "${PREFIX}_${LOGDATE}.log"
 MASK=$(grep -c "N" ./mask_$PREFIX/$PREFIX.contigs.fa.masked) >> "${PREFIX}_${LOGDATE}.log"
 
+
 #### OBTAIN ASSEMBLY STATISTICS ###
 conda activate bbtools
 stats.sh ./mask_$PREFIX/$PREFIX.contigs.fa.masked format=2 > ./$PREFIX.stats
 STAT=$(grep '% main' ./$PREFIX.stats | cut -d$'\t' -f2 | sed 's/%//')
 MINCONTIG=0
-if [ "$STAT" lt 40 ] 
+CUTOFF=40
+if [ 1 -eq "$(echo "${STAT} < ${CUTOFF}" | bc)" ]
 then
 	MINCONTIG=5000
 else
@@ -71,11 +73,29 @@ else
 fi
 
 #### ANNOTATION ####
-# Predict protein coding sequences using ProtHint
+# Train ProtHint model
 conda activate prothint_env
 export PATH="/mnt/iusers01/pb01/f99731hc/ProtHint/dependencies/GeneMarkES/gmes_linux_64/:$PATH"
 python ~/ProtHint/bin/prothint.py --threads $NSLOTS --fungus ./mask_$PREFIX/$PREFIX.contigs.fa.masked ~/scratch/imperial/proteins.fasta
+END
+
+## OBTAIN ASSEMBLY STATISTICS ##
+# Performed before gene calling to enable parameter optimisation
+conda activate bbtools
+stats.sh ./mask_$PREFIX/$PREFIX.contigs.fa.masked format=2 > ./$PREFIX.stats
+STAT=$(grep '% main' ./$PREFIX.stats | cut -d$'\t' -f2 | sed 's/%//')
+MINCONTIG=0
+CUTOFF=40
+if [ 1 -eq "$(echo "${STAT} < ${CUTOFF}" | bc)" ]
+then
+	MINCONTIG=5000
+else
+	MINCONTIG=1000
+fi
+
 # Make gene calls using GeneMark-EP+
+conda activate prothint_env
+
 ~/gmes_linux_64/gmes_petap.pl --cores $NSLOTS --EP prothint.gff --evidence evidence.gff --max_intron 200 --max_intergenic 100000 --sequence ./mask_$PREFIX/$PREFIX.contigs.fa.masked --min_contig=1000 --min_contig_in_predict=$MINCONTIG --fungus
 
 #### EXTRACT GENE FASTA ####
@@ -87,7 +107,7 @@ sed 's/ /_/g' ./mask_$PREFIX/$PREFIX.contigs.fa.masked > ./updated_masked_$PREFI
 # Extract the transcripts and peptides with gffread
 gffread -y $PREFIX.masked.pep.fa -w $PREFIX.masked.transcripts.fa -g ./updated_masked_$PREFIX.contigs.fa updated_masked_genemark.gtf
 
-
+: <<'END'
 GENES=$(grep -c ">" $PREFIX.masked.transcripts.fa)
 if [ -e "~/scratch/imperial/${LOGDATE_pipeline}.log" ]
 then
@@ -96,4 +116,5 @@ then
 	fi
 fi
 echo "${PREFIX},${READ1},${READ2},${GS},${MASK},${GENES},${STAT}" >> "~/scratch/imperial/${LOGDATE_pipeline}.log"
+END
 
