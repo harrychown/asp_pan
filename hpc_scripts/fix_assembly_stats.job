@@ -2,7 +2,7 @@
 #$ -cwd
 #$ -t 1-218
 #$ -N build_genome2
-#$ -pe smp.pe 12
+#$ -pe smp.pe 10
 module load apps/binapps/anaconda3/2020.07
 module load tools/env/proxy2 
 
