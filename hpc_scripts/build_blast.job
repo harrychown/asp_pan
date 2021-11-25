@@ -1,17 +1,27 @@
 #!/bin/bash --login
 #$ -cwd
-#$ -N para_blastp
+#$ -N para_blastbuild
 #$ -pe smp.pe 10
-#$ -t 1-218
-PROTEIN=`awk "NR==$SGE_TASK_ID" protein_paths.txt`
-PREFIX=$(echo $PROTEIN | rev | cut -d"/" -f1 | rev | cut -d"." -f1)
-echo $PREFIX
 module load apps/binapps/anaconda3/2020.07
 conda activate blast_env
-# Build BLAST db
-if [ ! -f pep_blast_db.00.phr ]; then
+LOGDATE=25_11_21
+# Extract individual protein and attribute files and combine for PanOCT input
+while read line 
+do
+PROTEIN=$(echo "${line}/${PREFIX}.masked.pep.fa")
+ATTR=$(echo "${line}/${PREFIX}_attr.txt")
+cat $PROTEIN >> ~/scratch/imperial/all_$LOGDATE.pep.fa
+cat $PROTEIN >> ~/scratch/imperial/all_attr_$LOGDATE.txt
+done <folder_paths.txt
+
+# Once all files have been combined, generate BLAST DB
+if [ ! -f pep_blast_db.00.phr ]
+then
     makeblastdb -in all.pep.fa -dbtype prot -out pep_blast_db
+else
+	rm -r pep_blast_db*
+	makeblastdb -in all_$LOGDATE.pep.fa -dbtype prot -out pep_blast_db
 fi
-# Run all-vs-all BLAST
-blastp -db pep_blast_db -query $PROTEIN -outfmt "6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore qlen slen" -out "${PREFIX}_v_all.tsv" -max_hsps 1 -num_threads $NSLOTS 
+
+
 
