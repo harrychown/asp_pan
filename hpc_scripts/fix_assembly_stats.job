@@ -7,7 +7,7 @@ module load apps/binapps/anaconda3/2020.07
 module load tools/env/proxy2 
 
 conda activate imperial
-LOGDATE=$(date +'%d_%m_%Y')
+LOGDATE=25_11_21
 
 FOLDER=`awk "NR==$SGE_TASK_ID" folder_paths.txt`
 
@@ -110,17 +110,42 @@ gffread -y $PREFIX.masked.pep.fa -w $PREFIX.masked.transcripts.fa -g ./updated_m
 ### ORGANISE PEPTIDES FOR BLAST ####
 # Incorporate prefix into FASTA header
 sed -i "s/>/>${PREFIX}/g" $PREFIX.masked.pep.fa
-# Add the peptides to file containing all peptides for BLAST analysis
-cat $PREFIX.masked.pep.fa >> "${LOGDATE}_all.pep.fa" 
+# Add the peptides to file containing all peptides for BLAST analysis - this could cut things up
+#cat $PREFIX.masked.pep.fa >> "${LOGDATE}_all.pep.fa" 
+
+### GENERATE ATTRIBUTE FILE FOR PANOCT ###
+# Extract gene lines
+grep -P "\tgene\t" updated_masked_genemark.gtf > gene.gtf 
+# Extract chromosome number
+grep -o '_.*_flag' gene.gtf | awk -F '_' '{print $2}' > chrom.col 
+# Extract protein name
+grep -o 'transcript_id \".*_t' gene.gtf | cut -d"\"" -f2 | sed "s/^/${PREFIX}_/g" | sed 's/$/_1/g' > protein.col 
+#Extract start 
+awk '{print $4}' gene.gtf > start.col 
+#Extract end 
+awk '{print $5}' gene.gtf > end.col 
+# Make genome ID col
+rm -r genome.col
+while read line 
+do 
+echo $PREFIX >> genome.col 
+done <gene.gtf
+#Combine as columns 
+paste chrom.col protein.col start.col end.col protein.col genome.col > "${PREFIX}_attr.txt"
+### GENE TAG FILE ###
+echo $PREFIX >> ~/scratch/imperial/all_tag_$LOGDATE.txt
+
 
 : <<'END'
+
+
 GENES=$(grep -c ">" $PREFIX.masked.transcripts.fa)
-if [ -e "~/scratch/imperial/${LOGDATE_pipeline}.log" ]
+if [ -e "~/scratch/imperial/${LOGDATE}_pipeline.log" ]
 then
-	if grep -q "${PREFIX}," "~/scratch/imperial/${LOGDATE_pipeline}.log"; then
-	    rm "~/scratch/imperial/${LOGDATE_pipeline}.log"
+	if grep -q "${PREFIX}," "~/scratch/imperial/${LOGDATE}_pipeline.log"; then
+	    rm "~/scratch/imperial/${LOGDATE}_pipeline.log"
 	fi
 fi
-echo "${PREFIX},${READ1},${READ2},${GS},${MASK},${GENES},${STAT}" >> "~/scratch/imperial/${LOGDATE_pipeline}.log"
+echo "${PREFIX},${READ1},${READ2},${GS},${MASK},${GENES},${STAT}" >> "~/scratch/imperial/${LOGDATE}_pipeline.log"
 END
 
