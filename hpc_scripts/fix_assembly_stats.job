@@ -93,10 +93,14 @@ else
 fi
 
 # Make gene calls using GeneMark-EP+
-END
+
 conda activate prothint_env
 
 ~/gmes_linux_64/gmes_petap.pl --cores $NSLOTS --EP prothint.gff --evidence evidence.gff --max_intron 200 --max_intergenic 100000 --sequence ./mask_$PREFIX/$PREFIX.contigs.fa.masked --min_contig=1000 --min_contig_in_predict=$MINCONTIG --fungus
+
+END
+
+conda activate prothint_env
 
 ### FORMAT GENEMARK OUTPUT ###
 # Format GTF
