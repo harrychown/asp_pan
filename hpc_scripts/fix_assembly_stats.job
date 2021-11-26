@@ -109,10 +109,6 @@ sed -i "s/transcript_id \"/transcript_id \"${PREFIX}_/g" updated_masked_genemark
 # Extract the transcripts and peptides with gffread
 gffread -y $PREFIX.masked.pep.fa -w $PREFIX.masked.transcripts.fa -g ./updated_masked_$PREFIX.contigs.fa updated_masked_genemark.gtf
 
-### RENAME PEPTIDES FOR BLAST ####
-# Incorporate prefix into FASTA header
-sed -i "s/>/>${PREFIX}_/g" $PREFIX.masked.pep.fa
-
 
 ### GENERATE ATTRIBUTE FILE FOR PANOCT ###
 # Extract gene lines
