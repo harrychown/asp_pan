@@ -6,12 +6,14 @@ module load apps/binapps/anaconda3/2020.07
 conda activate blast_env
 LOGDATE=25_11_21
 # Extract individual protein and attribute files and combine for PanOCT input
+
 while read line 
 do
+PREFIX=$(echo $line | rev | cut -d"/" -f1 | rev)
 PROTEIN=$(echo "${line}/${PREFIX}.masked.pep.fa")
 ATTR=$(echo "${line}/${PREFIX}_attr.txt")
 cat $PROTEIN >> ~/scratch/imperial/all_$LOGDATE.pep.fa
-cat $PROTEIN >> ~/scratch/imperial/all_attr_$LOGDATE.txt
+cat $ATTR >> ~/scratch/imperial/all_attr_$LOGDATE.txt
 done <folder_paths.txt
 
 # Once all files have been combined, generate BLAST DB
