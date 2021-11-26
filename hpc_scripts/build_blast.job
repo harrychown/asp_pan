@@ -17,7 +17,7 @@ done <folder_paths.txt
 # Once all files have been combined, generate BLAST DB
 if [ ! -f pep_blast_db.00.phr ]
 then
-    makeblastdb -in all.pep.fa -dbtype prot -out pep_blast_db
+    makeblastdb -in all_$LOGDATE.pep.fa -dbtype prot -out pep_blast_db
 else
 	rm -r pep_blast_db*
 	makeblastdb -in all_$LOGDATE.pep.fa -dbtype prot -out pep_blast_db
