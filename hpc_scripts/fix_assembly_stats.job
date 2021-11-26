@@ -103,6 +103,8 @@ conda activate gffread_env
 awk 'BEGIN{FS=OFS="\t"} {gsub(/ /, "_", $1)} 1' genemark.gtf > updated_masked_genemark.gtf
 # Do the same for the genome
 sed 's/ /_/g' ./mask_$PREFIX/$PREFIX.contigs.fa.masked > ./updated_masked_$PREFIX.contigs.fa
+# Add prefixes to transcript name
+sed -i "s/transcript_id \"/transcript_id \"${PREFIX}_/g" updated_masked_genemark.gtf 
 
 # Extract the transcripts and peptides with gffread
 gffread -y $PREFIX.masked.pep.fa -w $PREFIX.masked.transcripts.fa -g ./updated_masked_$PREFIX.contigs.fa updated_masked_genemark.gtf
@@ -118,7 +120,7 @@ grep -P "\tgene\t" updated_masked_genemark.gtf > gene.gtf
 # Extract chromosome number
 grep -o '_.*_flag' gene.gtf | awk -F '_' '{print $2}' > chrom.col 
 # Extract protein name
-grep -o 'transcript_id \".*_t' gene.gtf | cut -d"\"" -f2 | sed "s/^/${PREFIX}_/g" > protein.col 
+grep -o 'transcript_id \".*_t' gene.gtf | cut -d"\"" -f2  > protein.col 
 #Extract start 
 awk '{print $4}' gene.gtf > start.col 
 #Extract end 
