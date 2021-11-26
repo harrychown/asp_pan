@@ -1,8 +1,7 @@
 #!/bin/bash --login
 #$ -cwd
 #$ -t 1-218
-#$ -N contig_update
-#$ -pe smp.pe 10
+#$ -N contig_update2
 module load apps/binapps/anaconda3/2020.07
 module load tools/env/proxy2 
 
@@ -97,16 +96,17 @@ fi
 conda activate prothint_env
 
 ~/gmes_linux_64/gmes_petap.pl --cores $NSLOTS --EP prothint.gff --evidence evidence.gff --max_intron 200 --max_intergenic 100000 --sequence ./mask_$PREFIX/$PREFIX.contigs.fa.masked --min_contig=1000 --min_contig_in_predict=$MINCONTIG --fungus
-
+END
 #### EXTRACT GENE FASTA ####
 conda activate gffread_env
 # Replace " " in GTF chromosome name with "_"
 awk 'BEGIN{FS=OFS="\t"} {gsub(/ /, "_", $1)} 1' genemark.gtf > updated_masked_genemark.gtf
 # Do the same for the genome
 sed 's/ /_/g' ./mask_$PREFIX/$PREFIX.contigs.fa.masked > ./updated_masked_$PREFIX.contigs.fa
+
 # Extract the transcripts and peptides with gffread
 gffread -y $PREFIX.masked.pep.fa -w $PREFIX.masked.transcripts.fa -g ./updated_masked_$PREFIX.contigs.fa updated_masked_genemark.gtf
-END
+
 ### RENAME PEPTIDES FOR BLAST ####
 # Incorporate prefix into FASTA header
 sed -i "s/>/>${PREFIX}_/g" $PREFIX.masked.pep.fa
