@@ -93,22 +93,20 @@ else
 fi
 
 # Make gene calls using GeneMark-EP+
+END
 conda activate prothint_env
 
 ~/gmes_linux_64/gmes_petap.pl --cores $NSLOTS --EP prothint.gff --evidence evidence.gff --max_intron 200 --max_intergenic 100000 --sequence ./mask_$PREFIX/$PREFIX.contigs.fa.masked --min_contig=1000 --min_contig_in_predict=$MINCONTIG --fungus
-END
-#### EXTRACT GENE FASTA ####
-conda activate gffread_env
-# Replace " " in GTF chromosome name with "_"
-awk 'BEGIN{FS=OFS="\t"} {gsub(/ /, "_", $1)} 1' genemark.gtf > updated_masked_genemark.gtf
-# Do the same for the genome
+
+### FORMAT GENEMARK OUTPUT ###
+# Format GTF
+head genemark.gtf | cut -d" " -f1,4- | sed -e 's/ /\t/' | cut -f 1,3- | awk 'BEGIN{FS=OFS="\t"} {gsub(/ /, "_", $1)} 1' | sed "s/transcript_id \"/transcript_id \"${PREFIX}_/g" | sed "s/gene_id \"/gene_id \"${PREFIX}_/g" > "updated_masked_${PREFIX}_genemark.gtf"
+# Format genome
 sed 's/ /_/g' ./mask_$PREFIX/$PREFIX.contigs.fa.masked > ./updated_masked_$PREFIX.contigs.fa
-# Add prefixes to transcript name
-sed -i "s/transcript_id \"/transcript_id \"${PREFIX}_/g" updated_masked_genemark.gtf 
 
+### EXTRACT PROTEINS ###
 # Extract the transcripts and peptides with gffread
-gffread -y $PREFIX.masked.pep.fa -w $PREFIX.masked.transcripts.fa -g ./updated_masked_$PREFIX.contigs.fa updated_masked_genemark.gtf
-
+~/gmes_linux_64/get_sequence_from_GTF.pl "updated_masked_${PREFIX}_genemark.gtf" updated_masked_$PREFIX.contigs.fa
 
 ### GENERATE ATTRIBUTE FILE FOR PANOCT ###
 # Extract gene lines
