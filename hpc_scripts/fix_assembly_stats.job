@@ -120,7 +120,7 @@ sed "s/>/>${PREFIX}_/g" prot_seq.faa > $PREFIX.pep.fa
 # Extract gene lines
 grep -P "\tgene\t" "updated_masked_${PREFIX}_genemark.gtf" > gene.gtf 
 # Extract chromosome number
-awk -F '\t' '{print $1}' updated_masked_ARAF001_genemark.gtf | sed 's/.*_//g' > chrom.col
+awk -F '\t' '{print $1}' gene.gtf | sed 's/.*_//g' > chrom.col
 # Extract protein name
 grep -o 'transcript_id \".*_t' gene.gtf | cut -d"\"" -f2  > protein.col 
 #Extract start 
