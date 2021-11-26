@@ -7,10 +7,18 @@ conda activate blast_env
 LOGDATE=25_11_21
 # Extract individual protein and attribute files and combine for PanOCT input
 
+if [ -e ~/scratch/imperial/all_$LOGDATE.pep.fa ]
+then
+	rm ~/scratch/imperial/all_$LOGDATE.pep.fa ~/scratch/imperial/all_attr_$LOGDATE.txt
+else
+	echo "Generating new files..."
+fi
+
+
 while read line 
 do
 PREFIX=$(echo $line | rev | cut -d"/" -f1 | rev)
-PROTEIN=$(echo "${line}/${PREFIX}.masked.pep.fa")
+PROTEIN=$(echo "${line}/${PREFIX}.pep.fa")
 ATTR=$(echo "${line}/${PREFIX}_attr.txt")
 cat $PROTEIN >> ~/scratch/imperial/all_$LOGDATE.pep.fa
 cat $ATTR >> ~/scratch/imperial/all_attr_$LOGDATE.txt
