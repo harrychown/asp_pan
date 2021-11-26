@@ -5,7 +5,7 @@
 module load apps/binapps/anaconda3/2020.07
 module load tools/env/proxy2 
 
-conda activate imperial
+c
 LOGDATE=25_11_21
 
 FOLDER=`awk "NR==$SGE_TASK_ID" folder_paths.txt`
@@ -102,15 +102,15 @@ END
 
 conda activate prothint_env
 
-### FORMAT GENEMARK OUTPUT ###
-# Format GTF
-head genemark.gtf | cut -d" " -f1,4- | sed -e 's/ /\t/' | cut -f 1,3- | awk 'BEGIN{FS=OFS="\t"} {gsub(/ /, "_", $1)} 1' | sed "s/transcript_id \"/transcript_id \"${PREFIX}_/g" | sed "s/gene_id \"/gene_id \"${PREFIX}_/g" > "updated_masked_${PREFIX}_genemark.gtf"
-# Format genome
-sed 's/ /_/g' ./mask_$PREFIX/$PREFIX.contigs.fa.masked > ./updated_masked_$PREFIX.contigs.fa
-
 ### EXTRACT PROTEINS ###
+# Format GTF and genome to fit perl script
+head genemark.gtf | cut -d" " -f1,4- | sed -e 's/ /\t/' | cut -f 1,3- | awk 'BEGIN{FS=OFS="\t"} {gsub(/ /, "_", $1)} 1' > "updated_masked_${PREFIX}_genemark.gtf"
+sed 's/ /_/g' ./mask_$PREFIX/$PREFIX.contigs.fa.masked > ./updated_masked_$PREFIX.contigs.fa
 # Extract the transcripts and peptides with gffread
 ~/gmes_linux_64/get_sequence_from_GTF.pl "updated_masked_${PREFIX}_genemark.gtf" updated_masked_$PREFIX.contigs.fa
+# Re-format GTF and proteins to include prefix
+cat "updated_masked_${PREFIX}_genemark.gtf" | sed "s/transcript_id \"/transcript_id \"${PREFIX}_/g" | sed "s/gene_id \"/gene_id \"${PREFIX}_/g" > "updated_masked_${PREFIX}_genemark.gtf"
+sed "s/>/>${PREFIX}_/g" prot_seq.faa > $PREFIX.pep.fa
 
 ### GENERATE ATTRIBUTE FILE FOR PANOCT ###
 # Extract gene lines
@@ -144,13 +144,13 @@ echo $PREFIX >> ~/scratch/imperial/all_tag_$LOGDATE.txt
 : <<'END'
 
 
-GENES=$(grep -c ">" $PREFIX.masked.transcripts.fa)
+PROTEINS=$(grep -c ">" $PREFIX.pep.fa)
 if [ -e "~/scratch/imperial/${LOGDATE}_pipeline.log" ]
 then
 	if grep -q "${PREFIX}," "~/scratch/imperial/${LOGDATE}_pipeline.log"; then
 	    rm "~/scratch/imperial/${LOGDATE}_pipeline.log"
 	fi
 fi
-echo "${PREFIX},${READ1},${READ2},${GS},${MASK},${GENES},${STAT}" >> "~/scratch/imperial/${LOGDATE}_pipeline.log"
+echo "${PREFIX},${READ1},${READ2},${GS},${MASK},${PROTEIN},${STAT}" >> "~/scratch/imperial/${LOGDATE}_pipeline.log"
 END
 
