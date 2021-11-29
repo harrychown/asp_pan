@@ -182,15 +182,10 @@ trait9_RallK_RallU[pos_R_U] <-  1
 trait9_RallK_RallU[pos_R_K] <-  0
 
 # Build the traits file
-traits_data <- data.frame("trait1_cladeA_cladeB" = trait1_cladeA_cladeB,
-                           "trait2_itra_sensitive_resistant" = trait2_Sitr_Ritr,
-                           "trait3_itraresistant_known_unknown" = trait3_RitrK_RitrU,
-                           "trait4_vor_sensitive_resistant" = trait4_Svor_Rvor,
-                           "trait5_vorresistant_known_unknown" = trait5_RvorK_RvorU,
-                           "trait6_pos_sensitive_resistant" = trait6_Spos_Rpos,
-                           "trait7_posresistant_known_unknown" = trait7_RposK_RposU,
-                           "trait8_all_sensitive_resistant" = trait8_Sall_Rall,
-                           "trait9_allresistant_known_unknown" = trait9_RallK_RallU)
+traits_data <- data.frame(trait1_cladeA_cladeB, trait2_Sitr_Ritr,trait3_RitrK_RitrU,
+                           trait4_Svor_Rvor, trait5_RvorK_RvorU, trait6_Spos_Rpos,
+                           trait7_RposK_RposU, trait8_Sall_Rall, trait9_RallK_RallU)
+
 traits_data <- rownames(ordered_meta$Pangenome.id)
 write.csv(traits_data, paste(c(out_dir,"/traits_data.csv"), sep="", collapse=""), row.names=T)
 
