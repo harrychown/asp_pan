@@ -70,6 +70,7 @@ mock_data <- data.frame("Gene"=rep(0, nrow(data_blanked)),
                         "Avg group size nuc"=rep(0, nrow(data_blanked)))
 mock_roary <- cbind(mock_data, data_blanked)
 mock_roary$Gene <- rownames(data_blanked)
+mock_roary$No..isolates <- frequency
 write.csv(mock_roary, paste(c(out_dir,"/mock_roary.csv"), sep="", collapse=""), row.names=F)
 
 
