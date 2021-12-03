@@ -1,0 +1,46 @@
+#!/bin/bash --login
+#$ -cwd
+#$ -t 1-13206
+#$ -N groupcentroids
+
+FOLDER=`awk "NR==$SGE_TASK_ID" matchtable.txt`
+
+# Set tab as the delimiter
+IFS=$'\t'
+
+#Read the split line into an array based on tab delimiter
+read -a strarr <<< $line
+# Get the size of the variable
+size=${#strarr[*]} 
+# Store centroid name
+centroid_name="centroid_${strarr[0]}"
+echo $centroid_name
+i=0
+
+awk '{if(NR==1) {print $0} else {if($0 ~ /^>/) {print "\n"$0} else {printf $0}}}' nuc_seq.fna > linear_nuc_seq.fna
+
+while [ $i -ne $size ]
+do
+	i=$(($i+1))
+	# Get genome prefix
+	genome=$(echo ${strarr[i]} | cut -d"_" -f1)
+	gene_id=$(echo ${strarr[i]} | cut -d"_" -f2)
+	genome_path="/mnt/iusers01/pb01/f99731hc/scratch/imperial/Afum/$genome"
+	fasta_file="/mnt/iusers01/pb01/f99731hc/scratch/imperial/Afum/$genome/linear_nuc_seq.fna"
+	# Check whether a linear file exists
+	if [ ! -e $fasta_file ]
+	then
+	do
+		# Generate new file input
+		fasta_in=$(echo $fasta_file | sed 's/linear_//g')
+		# Remove blank spaces
+		fasta_clean=$(echo $fasta_file | sed 's/linear_/clean_/g')
+		sed '/^$/d' $fasta_in > $fasta_clean
+		# Linearise
+		awk '{if(NR==1) {print $0} else {if($0 ~ /^>/) {print "\n"$0} else {printf $0}}}' $fasta_clean > $fasta_file
+	done
+	fi
+	grep -A1 ">${gene_id}_g" $fasta_file >> $centroid_name.fasta
+		
+	
+done
