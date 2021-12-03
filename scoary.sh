@@ -1,0 +1,1 @@
+scoary -t /data/OneDrive/asp_pan/post_panoct/traits_data.csv -g /data/OneDrive/asp_pan/post_panoct/mock_roary.csv -n /data/OneDrive/imperial/update_microreact_1000bs.nwk --delimiter , -o /data/OneDrive/asp_pan/post_panoct/scoary_out --threads 8
