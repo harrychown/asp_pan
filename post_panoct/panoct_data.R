@@ -42,7 +42,8 @@ colnames(raw_data) <- isolate_names
 ## CREATE DATA TABLES ##
 # Convert to a binary data format
 if(file.exists(fullpath("gene_binary.csv"))){
-  binary_data <- read.csv(fullpath("gene_binary.csv"))
+  binary_data <- read.csv(fullpath("gene_binary.csv"), row.names = 1)
+  binary_data = as.data.frame(sapply(binary_data, as.numeric))
 }else{
   binary_data <- raw_data
   binary_data[binary_data=="----------"]<-0
@@ -120,93 +121,95 @@ if(!file.exists(fullpath("clean_meta.csv"))){
 ## CREATE PHENOTYPE DATA FOR SCOARY INPUT ##
 if(file.exists(fullpath("traits_data.csv"))){
   # Re-index metadata to match "mock roary"
-ordered_meta <- clean_meta[ match(clean_meta$Pangenome.id, colnames(data_blanked)), ]
-#strain   trait1    trait2
-# Generate data for trait 1: Clade A vs Clade B
-# Clade A = 0
-# Clade B = 1
-trait1_cladeA_cladeB <- ordered_meta$Clade
-trait1_cladeA_cladeB[trait1_cladeA_cladeB == "A"] <- 0
-trait1_cladeA_cladeB[trait1_cladeA_cladeB == "B"] <- 1
-
-# Generate data for trait 2: Itraconazole susceptible vs resistant
-# Itra sus = 0
-# Itra res = 1
-trait2_Sitr_Ritr <- ordered_meta$itr
-
-# Generate data for trait 3: Itra-resistant known vs unknown
-# Known = 0
-# Unknown = 1
-# Separate the itra-resistant isolates
-itra_resistant <- which(ordered_meta$itr == 1)
-# Identify the wildtypes to substitute later
-itra_R_U <- which(ordered_meta$AMR == "Wildtype" & ordered_meta$itr == 1)
-itra_R_K <- which(ordered_meta$AMR != "Wildtype" & ordered_meta$itr == 1)
-trait3_RitrK_RitrU <- rep(NA, nrow(ordered_meta))
-trait3_RitrK_RitrU[itra_R_U] <-  1
-trait3_RitrK_RitrU[itra_R_K] <- 0
-
-# Generate data for trait 4: Voriconazole susceptible vs resistant
-# Vor sus = 0
-# Vor res = 1
-trait4_Svor_Rvor <- ordered_meta$vor
-
-# Generate data for trait 5: Vor-resistant known vs unknown
-# Known = 0
-# Unknown = 1
-
-# Identify the wildtypes to substitute later
-vor_R_U <- which(ordered_meta$AMR == "Wildtype" & ordered_meta$vor == 1)
-vor_R_K <- which(ordered_meta$AMR != "Wildtype" & ordered_meta$vor == 1)
-trait5_RvorK_RvorU <- rep(NA, nrow(ordered_meta))
-trait5_RvorK_RvorU[vor_R_U] <-  1
-trait5_RvorK_RvorU[vor_R_K] <-  0
-
-# Generate data for trait 6: posiconazole susceptible vs resistant
-# Pos sus = 0
-# Pos res = 1
-trait6_Spos_Rpos <- ordered_meta$pos
-
-# Generate data for trait 7: Pos-resistant known vs unknown
-# Known = 0
-# Unknown = 1
-# Separate the Pos-resistant isolates
-pos_resistant <- which(ordered_meta$pos == 1)
-pos_susceptible <- which(ordered_meta$pos == 0)
-# Identify the wildtypes to substitute later
-pos_R_U <- which(ordered_meta$AMR == "Wildtype" & ordered_meta$pos == 1)
-pos_R_K <- which(ordered_meta$AMR != "Wildtype" & ordered_meta$pos == 1)
-trait7_RposK_RposU <- rep(NA, nrow(ordered_meta))
-trait7_RposK_RposU[pos_R_U] <- 1
-trait7_RposK_RposU[pos_R_K] <- 0
-
-# Generate data for trait 8: All-azole susceptible vs resistant
-# All sus = 0
-# All res = 1
-azole_sum <- rowSums(ordered_meta[,21:23])
-azole_res <- which(azole_sum == 3)
-azole_sus <- which(azole_sum == 0)
-trait8_Sall_Rall <- rep(NA, nrow(ordered_meta))
-trait8_Sall_Rall[azole_sus] <- 0
-trait8_Sall_Rall[azole_res] <- 1
-
-# Generate data for trait 9: All-resistant known vs unknown
-# Known = 0
-# Unknown = 1
-# Identify the wildtypes to substitute later
-pos_R_U <- which(ordered_meta$AMR == "Wildtype" & azole_sum == 3)
-pos_R_K <- which(ordered_meta$AMR != "Wildtype" & azole_sum == 3)
-trait9_RallK_RallU <- rep(NA, nrow(ordered_meta))
-trait9_RallK_RallU[pos_R_U] <-  1
-trait9_RallK_RallU[pos_R_K] <-  0
-
-# Build the traits file
-traits_data <- data.frame(trait1_cladeA_cladeB, trait2_Sitr_Ritr,trait3_RitrK_RitrU,
-                           trait4_Svor_Rvor, trait5_RvorK_RvorU, trait6_Spos_Rpos,
-                           trait7_RposK_RposU, trait8_Sall_Rall, trait9_RallK_RallU)
-
-traits_data <- rownames(ordered_meta$Pangenome.id)
-write.csv(traits_data, fullpath("traits_data.csv"), row.names=T)
+  data_blanked <- raw_data
+  data_blanked[data_blanked=="----------"]<-""
+  ordered_meta <- clean_meta[ match(clean_meta$Pangenome.id, colnames(data_blanked)), ]
+  #strain   trait1    trait2
+  # Generate data for trait 1: Clade A vs Clade B
+  # Clade A = 0
+  # Clade B = 1
+  trait1_cladeA_cladeB <- ordered_meta$Clade
+  trait1_cladeA_cladeB[trait1_cladeA_cladeB == "A"] <- 0
+  trait1_cladeA_cladeB[trait1_cladeA_cladeB == "B"] <- 1
+  
+  # Generate data for trait 2: Itraconazole susceptible vs resistant
+  # Itra sus = 0
+  # Itra res = 1
+  trait2_Sitr_Ritr <- ordered_meta$itr
+  
+  # Generate data for trait 3: Itra-resistant known vs unknown
+  # Known = 0
+  # Unknown = 1
+  # Separate the itra-resistant isolates
+  itra_resistant <- which(ordered_meta$itr == 1)
+  # Identify the wildtypes to substitute later
+  itra_R_U <- which(ordered_meta$AMR == "Wildtype" & ordered_meta$itr == 1)
+  itra_R_K <- which(ordered_meta$AMR != "Wildtype" & ordered_meta$itr == 1)
+  trait3_RitrK_RitrU <- rep(NA, nrow(ordered_meta))
+  trait3_RitrK_RitrU[itra_R_U] <-  1
+  trait3_RitrK_RitrU[itra_R_K] <- 0
+  
+  # Generate data for trait 4: Voriconazole susceptible vs resistant
+  # Vor sus = 0
+  # Vor res = 1
+  trait4_Svor_Rvor <- ordered_meta$vor
+  
+  # Generate data for trait 5: Vor-resistant known vs unknown
+  # Known = 0
+  # Unknown = 1
+  
+  # Identify the wildtypes to substitute later
+  vor_R_U <- which(ordered_meta$AMR == "Wildtype" & ordered_meta$vor == 1)
+  vor_R_K <- which(ordered_meta$AMR != "Wildtype" & ordered_meta$vor == 1)
+  trait5_RvorK_RvorU <- rep(NA, nrow(ordered_meta))
+  trait5_RvorK_RvorU[vor_R_U] <-  1
+  trait5_RvorK_RvorU[vor_R_K] <-  0
+  
+  # Generate data for trait 6: posiconazole susceptible vs resistant
+  # Pos sus = 0
+  # Pos res = 1
+  trait6_Spos_Rpos <- ordered_meta$pos
+  
+  # Generate data for trait 7: Pos-resistant known vs unknown
+  # Known = 0
+  # Unknown = 1
+  # Separate the Pos-resistant isolates
+  pos_resistant <- which(ordered_meta$pos == 1)
+  pos_susceptible <- which(ordered_meta$pos == 0)
+  # Identify the wildtypes to substitute later
+  pos_R_U <- which(ordered_meta$AMR == "Wildtype" & ordered_meta$pos == 1)
+  pos_R_K <- which(ordered_meta$AMR != "Wildtype" & ordered_meta$pos == 1)
+  trait7_RposK_RposU <- rep(NA, nrow(ordered_meta))
+  trait7_RposK_RposU[pos_R_U] <- 1
+  trait7_RposK_RposU[pos_R_K] <- 0
+  
+  # Generate data for trait 8: All-azole susceptible vs resistant
+  # All sus = 0
+  # All res = 1
+  azole_sum <- rowSums(ordered_meta[,21:23])
+  azole_res <- which(azole_sum == 3)
+  azole_sus <- which(azole_sum == 0)
+  trait8_Sall_Rall <- rep(NA, nrow(ordered_meta))
+  trait8_Sall_Rall[azole_sus] <- 0
+  trait8_Sall_Rall[azole_res] <- 1
+  
+  # Generate data for trait 9: All-resistant known vs unknown
+  # Known = 0
+  # Unknown = 1
+  # Identify the wildtypes to substitute later
+  pos_R_U <- which(ordered_meta$AMR == "Wildtype" & azole_sum == 3)
+  pos_R_K <- which(ordered_meta$AMR != "Wildtype" & azole_sum == 3)
+  trait9_RallK_RallU <- rep(NA, nrow(ordered_meta))
+  trait9_RallK_RallU[pos_R_U] <-  1
+  trait9_RallK_RallU[pos_R_K] <-  0
+  
+  # Build the traits file
+  traits_data <- data.frame(trait1_cladeA_cladeB, trait2_Sitr_Ritr,trait3_RitrK_RitrU,
+                             trait4_Svor_Rvor, trait5_RvorK_RvorU, trait6_Spos_Rpos,
+                             trait7_RposK_RposU, trait8_Sall_Rall, trait9_RallK_RallU)
+  
+  rownames(traits_data) <- ordered_meta[,1]
+  write.csv(traits_data, fullpath("traits_data.csv"), row.names=T)
 }
 
 
@@ -219,8 +222,8 @@ write.csv(traits_data, fullpath("traits_data.csv"), row.names=T)
 strain_specific_data <- binary_data[which(frequency==1),]
 strain_specific_freq <- colSums(strain_specific_data)
 high_specific_freq <- strain_specific_freq[which(strain_specific_freq > 50)]
-if(!file.exists("strain_specifc_freq.csv")){
-  write.csv(strain_specific_freq, strain_specifc_freq.csv)
+if(!file.exists(fullpath("strain_specifc_freq.csv"))){
+  write.csv(strain_specific_freq, fullpath("strain_specifc_freq.csv"))
 }
 
 
@@ -277,6 +280,8 @@ if(!file.exists("strain_specifc_freq.csv")){
 # 
 # dev.off()
 
+write(names(which(strain_specific_freq == 0)), fullpath("zero_specific.txt"))
+
 ## GENERATE PANGENOME LINE GRAPH (HEAP) ##
 if(!file.exists(fullpath("curve.tiff"))){
   # Generate rarefaction data
@@ -312,7 +317,7 @@ dev.off()
 ## GENERATE OVERVIEW HISTOGRAM ##
 if(!file.exists(fullpath("histogram.tiff"))){
   total <- max(frequency)
-highest_frequency <- sort(freq_table,decreasing=TRUE)[1]
+#highest_frequency <- sort(freq_table,decreasing=TRUE)[1]
 freq_table <- table(frequency)
 frequency_df <- as.data.frame(frequency)
 tiff(file = fullpath("histogram.tiff"),
