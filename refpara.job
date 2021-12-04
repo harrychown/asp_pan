@@ -1,0 +1,8 @@
+#!/bin/bash --login
+#$ -cwd
+#$ -t 1-57
+#$ -N decompress
+
+FILE=`awk "NR==$SGE_TASK_ID" refseq_files.txt`
+
+tar -xvzf $FILE
