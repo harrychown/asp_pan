@@ -1,0 +1,31 @@
+#!/bin/bash --login
+#$ -cwd
+#$ -N arrgh
+#$ -pe smp.pe 32
+#$ -l mem1500  
+#$ -M harry.chown@postgrad.manchester.ac.uk
+#$ -m e
+#$ -hold_jid para_blastp
+module load tools/env/proxy # load proxy to download online tools
+
+module load apps/binapps/anaconda/2019.07
+source activate pangenome_env
+
+DBNAME=$(echo kraken_full)
+
+kraken2-build --download-taxonomy --db $DBNAME # Install taxonomoy
+
+kraken2-build --download-library bacteria --db $DBNAME
+kraken2-build --download-library human --db $DBNAME
+kraken2-build --download-library fungi --db $DBNAME
+kraken2-build --download-library viral --db $DBNAME
+
+# Build database
+kraken2-build --build --threads $NSLOTS --db $DBNAME
+
+# Search database
+
+# Run kraken2 with default parameters
+kraken2 --output "C184_out.tsv" --report "C184_report.tsv" --db $DBNAME --threads $NSLOTS --paired ~/scratch/imperial/Afum/C184/C184_1_qc.fastq  ~/scratch/imperial/Afum/C184/C184_2_qc.fastq
+
+
