@@ -1,0 +1,16 @@
+#!/bin/bash --login
+#$ -cwd
+#$ -N name
+#$ -M harry.chown@postgrad.manchester.ac.uk
+#$ -m e
+#$ -pe smp.pe 32
+#$ -l mem1500  
+module load apps/binapps/anaconda3/2020.07
+module load tools/env/proxy2 
+# creating a diamond-formatted database file
+#diamond makedb --in reference.fasta -d reference
+# running a search in blastp mode
+diamond blastp -e 0.00001 --query-cover 50 --subject-cover 50 --max-hsps 1 --max-target-seqs 1 --id 70 -d reference -q queries.fasta -o matches.tsv
+
+
+
