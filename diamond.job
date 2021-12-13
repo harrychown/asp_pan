@@ -6,11 +6,45 @@
 #$ -pe smp.pe 32
 #$ -l mem1500  
 module load apps/binapps/anaconda3/2020.07
-module load tools/env/proxy2 
-# creating a diamond-formatted database file
-#diamond makedb --in reference.fasta -d reference
+conda activate blast_env
+
+blastdbcmd -entry all -db nr -out nr.fasta
+
+### BLAST AGAINST AF293 ###
+# BUILD BLAST DB
+if [ ! -f af293.phr ]
+then
+makeblastdb -in GCF_000002655.1_ASM265v1_protein.faa -dbtype prot -out af293
+fi
+blastp -db af293 -query ~/scratch/imperial/centroids.fasta -outfmt 6 -qcov_hsp_perc 50 -out centroid-v-af293.tsv  -max_hsps 1 -num_threads $NSLOTS 
+
+# STORE FILTERED MATCHES
+cat centroid-v-af293.tsv | awk '$3>70' > af293.matches
+awk '{ print $1 }' af293.matches | sort | uniq > af293_match.names
+grep centroid ~/scratch/imperial/centroids.fasta | cut -d" " -f1 | sed 's/>//g' > centroid_match.names
+grep -v -w -f af293_match.names centroid_match.names > af293_no_match.names
+
+
+### SUBSET NON-AF293 PROTEINS ###
+conda activate seqkit_env
+seqtk subseq ~/scratch/imperial/centroids.fasta af293_no_match.names > subset.fa
+
+
+### DIAMOND SEARCH SUBSET
+# BUILD DIAMOND DB
+conda activate diamondenv
+if [ ! -f reference.dmnd ]
+then
+diamond makedb --in nr.fasta -d reference -p $NSLOTS
+fi
+
+# SEARCH DB
 # running a search in blastp mode
-diamond blastp -e 0.00001 --query-cover 50 --subject-cover 50 --max-hsps 1 --max-target-seqs 1 --id 70 -d reference -q queries.fasta -o matches.tsv
+diamond blastp -d reference -q subset.fa -k 1 --max-hsps 1 -e 0.00001 --query-cover 50 --subject-cover 50 --id 70 -o subset.matches -p $NSLOTS
 
+# FIND GENE IDS
+cat af293.matches subset.matches > all.matches
+awk '{ print $1 }' all.matches > matched.centroids
+awk '{ print $2 }' all.matches > matched.peptides
 
-
+for i in `cat matched.peptides`; do printf ${i}"\t"; esearch -db protein -query ${i} | elink -target gene | esummary | xtract -pattern DocumentSummary -element Name >> matched.genes; done
