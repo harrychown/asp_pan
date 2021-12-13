@@ -1,4 +1,4 @@
-# Generate a pan-genome for _Aspergillus fumigatus_
+# Generating a pan-genome for _Aspergillus fumigatus_
 
 Some scripts found within this repository were used on HPC machines, therefore these may not run on local machines. The majority of software was downloaded/installed using Conda and a Conda environment was generated for each piece.
 
