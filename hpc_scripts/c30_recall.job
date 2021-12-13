@@ -24,7 +24,7 @@ conda activate prothint_env
 mkdir recall_ep
 export PATH="/mnt/iusers01/pb01/f99731hc/ProtHint/dependencies/GeneMarkES/gmes_linux_64/:$PATH"
 # Make gene calls using GeneMark-EP+
-~/gmes_linux_64/gmes_petap.pl --cores $NSLOTS --EP prothint.gff --evidence evidence.gff --max_intron 200 --max_intergenic 100000 --sequence ./mask_$PREFIX/$PREFIX.contigs.fa.masked --min_contig=10000 --fungus --work_dir ./recall_ep
+~/gmes_linux_64/gmes_petap.pl --cores $NSLOTS --EP prothint.gff --evidence evidence.gff --max_intron 200 --max_intergenic 100000 --sequence ./mask_$PREFIX/$PREFIX.contigs.fa.masked --min_contig=10000 --min_contig_in_predict=1000 --fungus --work_dir ./recall_ep
 
 #### EXTRACT GENE FASTA ####
 conda activate gffread_env
@@ -33,12 +33,5 @@ awk 'BEGIN{FS=OFS="\t"} {gsub(/ /, "_", $1)} 1' ./recall_ep/genemark.gtf > ./rec
 # Do the same for the genome
 sed 's/ /_/g' ./mask_$PREFIX/$PREFIX.contigs.fa.masked > ./recall_ep/updated_masked_$PREFIX.contigs.fa
 # Extract the transcripts with gffread
-gffread -w ./recall_ep/$PREFIX.masked.transcripts.fa -g ./updated_masked_$PREFIX.contigs.fa ./recall_ep/updated_masked_genemark.gtf
+gffread -y ./recall_ep/$PREFIX.masked.pep.fa -w ./recall_ep/$PREFIX.masked.transcripts.fa -g ./updated_masked_$PREFIX.contigs.fa ./recall_ep/updated_masked_genemark.gtf
 
-#### CONVERT GENE TO PEP ####
-conda activate emboss_env
-transeq -sequence ./recall_ep/$PREFIX.masked.transcripts.fa -outseq ./recall_ep/$PREFIX.masked.pep.fa
-# Remove asterisks
-sed -i 's/*//g' ./recall_ep/$PREFIX.masked.pep.fa
-
-GENES=$(grep -c ">" ./recall_ep/$PREFIX.masked.transcripts.fa)

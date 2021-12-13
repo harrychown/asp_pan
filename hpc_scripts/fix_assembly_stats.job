@@ -1,0 +1,160 @@
+#!/bin/bash --login
+#$ -cwd
+#$ -t 1-218
+#$ -N contig_update2
+module load apps/binapps/anaconda3/2020.07
+module load tools/env/proxy2 
+
+LOGDATE=25_11_21
+
+FOLDER=`awk "NR==$SGE_TASK_ID" folder_paths.txt`
+
+# Enter the isolate folder
+cd $FOLDER
+# Extract prefix
+PREFIX=$(echo $FOLDER | rev | cut -d"/" -f1 | rev)
+echo $PREFIX
+: <<'END'
+#### QC ####
+# Remove old data
+if [ -e ${PREFIX}_1_qc.fastq ]
+then
+	echo "Overwriting old QC files.."	
+	rm ${PREFIX}_*_*qc.fastq
+else
+	echo "Generating new QC files..."
+fi
+
+# Trim sequence pairs	
+trimmomatic PE -threads $NSLOTS ./${PREFIX}_1.fastq.gz ./${PREFIX}_2.fastq.gz \
+		${PREFIX}_1_qc.fastq ${PREFIX}_1_unqc.fastq \
+		${PREFIX}_2_qc.fastq ${PREFIX}_2_unqc.fastq \
+		ILLUMINACLIP:/mnt/iusers01/pb01/f99731hc/TruSeq3-PE.fa:2:40:15 TOPHRED33 LEADING:20 \
+		TRAILING:20 SLIDINGWINDOW:2:20 MINLEN:25 \
+		AVGQUAL:20
+
+READ1=$(echo $(cat ${PREFIX}_1_qc.fastq | wc -l)/4 | bc)
+READ2=$(echo $(cat ${PREFIX}_2_qc.fastq | wc -l)/4 | bc)
+
+
+#### ASSEMBLE GENOME ####
+# Assemble genomes with megahit, removing directory if previously ran
+if [ -e ./megahit_out/log ] 
+then
+	echo "Overwriting old assembly..."	
+	rm -r ./megahit_out
+else
+	echo "Generating new assembly..."
+fi
+megahit -t $NSLOTS --no-mercy -1 "${PREFIX}_1_qc.fastq" -2 "${PREFIX}_2_qc.fastq" --out-prefix $PREFIX -o megahit_$PREFIX
+echo "Genome size:" >> "${PREFIX}_${LOGDATE}.log"
+GS=$(grep -v ">" ./megahit_$PREFIX/$PREFIX.contigs.fa | wc -c) >> "${PREFIX}_${LOGDATE}.log"
+
+#### MASK GENOME ####
+conda activate rmask
+~/RepeatMasker/RepeatMasker -pa $[NSLOTS / 4] -species 'Aspergillus fumigatus' -s -no_is -cutoff 255 -frag 20000 ./megahit_$PREFIX/$PREFIX.contigs.fa -dir ./mask_$PREFIX/
+echo "Number of masked bases:" >> "${PREFIX}_${LOGDATE}.log"
+MASK=$(grep -c "N" ./mask_$PREFIX/$PREFIX.contigs.fa.masked) >> "${PREFIX}_${LOGDATE}.log"
+
+
+#### OBTAIN ASSEMBLY STATISTICS ###
+conda activate bbtools
+stats.sh ./mask_$PREFIX/$PREFIX.contigs.fa.masked format=2 > ./$PREFIX.stats
+STAT=$(grep '% main' ./$PREFIX.stats | cut -d$'\t' -f2 | sed 's/%//')
+MINCONTIG=0
+CUTOFF=40
+if [ 1 -eq "$(echo "${STAT} < ${CUTOFF}" | bc)" ]
+then
+	MINCONTIG=5000
+else
+	MINCONTIG=1000
+fi
+
+#### ANNOTATION ####
+# Train ProtHint model
+conda activate prothint_env
+export PATH="/mnt/iusers01/pb01/f99731hc/ProtHint/dependencies/GeneMarkES/gmes_linux_64/:$PATH"
+python ~/ProtHint/bin/prothint.py --threads $NSLOTS --fungus ./mask_$PREFIX/$PREFIX.contigs.fa.masked ~/scratch/imperial/proteins.fasta
+
+
+## OBTAIN ASSEMBLY STATISTICS ##
+# Performed before gene calling to enable parameter optimisation
+conda activate bbtools
+stats.sh ./mask_$PREFIX/$PREFIX.contigs.fa.masked format=2 > ./$PREFIX.stats
+STAT=$(grep '% main' ./$PREFIX.stats | cut -d$'\t' -f2 | sed 's/%//')
+MINCONTIG=0
+CUTOFF=40
+if [ 1 -eq "$(echo "${STAT} < ${CUTOFF}" | bc)" ]
+then
+	MINCONTIG=5000
+else
+	MINCONTIG=1000
+fi
+
+# Make gene calls using GeneMark-EP+
+
+conda activate prothint_env
+
+~/gmes_linux_64/gmes_petap.pl --cores $NSLOTS --EP prothint.gff --evidence evidence.gff --max_intron 200 --max_intergenic 100000 --sequence ./mask_$PREFIX/$PREFIX.contigs.fa.masked --min_contig=1000 --min_contig_in_predict=$MINCONTIG --fungus
+
+END
+
+conda activate prothint_env
+
+### EXTRACT PROTEINS ###
+# Format GTF and genome to fit perl script
+cat genemark.gtf | cut -d" " -f1,4- | sed -e 's/ /\t/' | cut -f 1,3- > genemark_clean.gtf
+# Extract the transcripts and peptides with GeneMark
+~/gmes_linux_64/get_sequence_from_GTF.pl genemark_clean.gtf ./mask_$PREFIX/$PREFIX.contigs.fa.masked
+# Re-format GTF and proteins to include prefix; remove blank space from chromosome ID
+sed -i "s/transcript_id \"/transcript_id \"${PREFIX}_/g" genemark_clean.gtf 
+sed -i "s/gene_id \"/gene_id \"${PREFIX}_/g" genemark_clean.gtf 
+awk 'BEGIN{FS=OFS="\t"} {gsub(/ /, "_", $1)} 1' genemark_clean.gtf > "updated_masked_${PREFIX}_genemark.gtf"
+
+sed 's/ /_/g' ./mask_$PREFIX/$PREFIX.contigs.fa.masked > ./updated_masked_$PREFIX.contigs.fa
+
+sed "s/>/>${PREFIX}_/g" prot_seq.faa > $PREFIX.pep.fa
+
+
+### GENERATE ATTRIBUTE FILE FOR PANOCT ###
+# Extract gene lines
+grep -P "\tgene\t" "updated_masked_${PREFIX}_genemark.gtf" > gene.gtf 
+# Extract chromosome number
+awk -F '\t' '{print $1}' gene.gtf | sed 's/.*_//g' > chrom.col
+# Extract protein name
+grep -o 'transcript_id \".*_t' gene.gtf | cut -d"\"" -f2  > protein.col 
+#Extract start 
+awk '{print $4}' gene.gtf > start.col 
+#Extract end 
+awk '{print $5}' gene.gtf > end.col 
+# Make genome ID col
+rm -r genome.col
+while read line 
+do 
+echo $PREFIX >> genome.col 
+done <gene.gtf
+#Combine as columns 
+paste chrom.col protein.col start.col end.col protein.col genome.col > "${PREFIX}_attr.txt"
+### GENE TAG FILE ###
+if [ -e "~/scratch/imperial/all_tag_$LOGDATE.txt" ]
+then
+	if grep -q "${PREFIX}," "~/scratch/imperial/all_tag_$LOGDATE.txt"; then
+	    rm "~/scratch/imperial/all_tag_$LOGDATE.txt"
+	fi
+fi
+echo $PREFIX >> ~/scratch/imperial/all_tag_$LOGDATE.txt
+
+
+: <<'END'
+
+
+PROTEINS=$(grep -c ">" $PREFIX.pep.fa)
+if [ -e "~/scratch/imperial/${LOGDATE}_pipeline.log" ]
+then
+	if grep -q "${PREFIX}," "~/scratch/imperial/${LOGDATE}_pipeline.log"; then
+	    rm "~/scratch/imperial/${LOGDATE}_pipeline.log"
+	fi
+fi
+echo "${PREFIX},${READ1},${READ2},${GS},${MASK},${PROTEIN},${STAT}" >> "~/scratch/imperial/${LOGDATE}_pipeline.log"
+END
+
