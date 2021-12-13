@@ -214,9 +214,8 @@ if(file.exists(fullpath("traits_data.csv"))){
 
 
 ## CHECK ESSENTIAL GENE PRESENCE ##
-# essential_freq <- frequency[essential_centroids]
-# essential_and_core <- essential_freq[which(essential_freq == 218)]
-# essential_noncore <- essential_freq[which(essential_freq < 218)]
+essential_freq <- frequency[essential_centroids]
+
 
 ## COUNT NUMBER OF UNIQUE GENES PER STRAIN ##
 strain_specific_data <- binary_data[which(frequency==1),]
@@ -226,59 +225,6 @@ if(!file.exists(fullpath("strain_specifc_freq.csv"))){
   write.csv(strain_specific_freq, fullpath("strain_specifc_freq.csv"))
 }
 
-
-# ## EXTRACT C30-SPECIFIC GENES ###
-# c30_specific_data <- strain_specific_data[which(strain_specific_data$C30 == 1),]
-# c30_centroids <- rownames(c30_specific_data)
-# c30_raw <- raw_data[c30_centroids, "C30"]
-# 
-# c30_num <- c()
-# for(i in c30_raw){
-#   transcript_id <- str_split(i, "_")[[1]][2]
-#   transcript_num <- as.numeric(transcript_id)
-#   c30_num <- c(c30_num, transcript_num)
-# }
-# c30_data <- as.data.frame(cbind(c30_raw, c30_num))
-# c30_data$c30_num <- as.numeric(c30_data$c30_num)
-# tiff(file = "/home/harry/Documents/imperial/1_11_panoct/c30.tiff",
-#      unit = "in",
-#      res=600,
-#      height = 5,
-#      width = 7)
-# p<-ggplot(data = c30_data, aes(x=c30_num)) +
-#   geom_histogram(color="black", fill="white", binwidth=50) +
-#   xlab("Gene chronology") + ylab("Frequency")
-# 
-# p
-# 
-# dev.off()
-# 
-# 
-# ## EXTRACT C184-SPECIFIC GENES ###
-# c184_specific_data <- strain_specific_data[which(strain_specific_data$C184 == 1),]
-# c184_centroids <- rownames(c184_specific_data)
-# c184_raw <- raw_data[c184_centroids, "C184"]
-# 
-# c184_num <- c()
-# for(i in c184_raw){
-#   transcript_id <- str_split(i, "_")[[1]][2]
-#   transcript_num <- as.numeric(transcript_id)
-#   c184_num <- c(c184_num, transcript_num)
-# }
-# c184_data <- as.data.frame(cbind(c184_raw, c184_num))
-# c184_data$c184_num <- as.numeric(c184_data$c184_num)
-# tiff(file = "/home/harry/Documents/imperial/1_11_panoct/c184.tiff",
-#      unit = "in",
-#      res=600,
-#      height = 5,
-#      width = 7)
-# p<-ggplot(data = c184_data, aes(x=c184_num)) +
-#   geom_histogram(color="black", fill="white", binwidth=50) +
-#   xlab("Gene chronology") + ylab("Frequency")
-# 
-# p
-# 
-# dev.off()
 
 write(names(which(strain_specific_freq == 0)), fullpath("zero_specific.txt"))
 
@@ -290,24 +236,31 @@ heap_data <- heaps(t(binary_data), n.perm = 1000)
 heap=signif(heap_data[2],2)
 # Identify the median values across the permutations
 perm_data <- line_data[2:nrow(line_data),2:ncol(line_data)]
+# Get median data
 median_perm <- round(apply(perm_data, 1, median, na.rm=T))
 median_data <- as.data.frame(cbind(1:length(median_perm), median_perm))
-
-# Basic line plot with points
+# Convert to long
+perm_data$X <- rownames(perm_data)
+long_data <- melt(setDT(perm_data), id.vars = c("X"), variable.name = "perm")
 tiff(file = fullpath("curve.tiff"),
      unit = "in",
      res=600,
      height = 5,
      width = 10)
+# Plot raw data
+plot(long_data$X, long_data$value, 
+     xlim=c(0, 250), ylim=c(9000, 14000), 
+     xaxt='n', yaxt='n', 
+     xlab = "Number of genomes",
+     ylab = "Number of gene clusters",
+     col=rgb(0.4,0.4,0.8,0.6),pch=16 , cex=1.3) 
+# Now, define a custom axis
+axis(side = 1, at=seq(from = 0, to = 250, by = 50))
+axis(side = 2, at=seq(from = 9000, to = 14000, by = 1000))
+# Add median line
+lines(median_data$V1, median_data$median_perm, col=2, lwd=2 )  
+text(200, 9000 , labels=(paste(c( "\u03b3=", heap), sep ="", collapse="")))
 
-p <- ggplot(data=median_data, aes(x=V1, y=median_perm)) +
-  geom_line() +
-  xlim(0, nrow(median_data)) +
-  ylim(0, max(median_perm)) +
-  xlab("Number of genomes") +
-  ylab("Number of gene clusters") +
-  annotate("text", x=nrow(median_data)*0.66, y=10, label= paste(c("gamma=", heap), sep = "", collapse ="")) 
-print(p)
 
 dev.off()
 
@@ -353,51 +306,4 @@ p
 
 dev.off()
 }
-
-
-# ## SUBSET BASED ON METADATA ##
-# # Make function to subset things that are  not in a vector
-# `%nin%` = Negate(`%in%`)
-# # What unique known resistant mutations are there?
-# amr_types <- unique(clean_meta$AMR)
-# t_binary <- t(binary_data)
-# clade_A_data <- t_binary[clean_meta$Pangenome.id[which(clean_meta$Clade == "A")],]
-# clade_B_data <- t_binary[clean_meta$Pangenome.id[which(clean_meta$Clade == "B")],]
-# 
-# A_names <- names(frequency)[which(colSums(clade_A_data) == nrow(clade_A_data))]
-# B_names <- names(frequency)[which(colSums(clade_B_data) == nrow(clade_B_data))]
-# 
-# A_specific  <- A_names[which(A_names %nin% B_names)]
-# B_specific  <- B_names[which(B_names %nin% A_names)]
-# 
-# write(A_specific, "/home/harry/Documents/imperial/1_11_panoct/clade_A_specific.txt")
-# write(B_specific, "/home/harry/Documents/imperial/1_11_panoct/clade_B_specific.txt" )
-# 
-# # Itraconazole resistance focus
-# resistant_data <- t_binary[clean_meta$Pangenome.id[which(clean_meta$itr == 1)],]
-# susceptible_data <- t_binary[clean_meta$Pangenome.id[which(clean_meta$itr == 0)],]
-# 
-# r_names <- names(frequency)[which(colSums(resistant_data) == nrow(resistant_data))]
-# s_names <- names(frequency)[which(colSums(susceptible_data) == nrow(susceptible_data))]
-# 
-# r_specific  <- r_names[which(r_names %nin% s_names)]
-# s_specific  <- s_names[which(s_names %nin% r_names)]
-# 
-# write(r_specific, "/home/harry/Documents/imperial/1_11_panoct/itra_res_specific.txt")
-# write(s_specific, "/home/harry/Documents/imperial/1_11_panoct/itra_sus_specific.txt" )
-# 
-# 
-# 
-# # Itra resistance but unknown mechanism
-# known_r_data <- t_binary[clean_meta$Pangenome.id[which(clean_meta$itr == 1 & clean_meta$AMR != "Wildtype")],]
-# unknown_r_data <- t_binary[clean_meta$Pangenome.id[which(clean_meta$itr == 1 & clean_meta$AMR == "Wildtype")],]
-# 
-# known_r_specific <- names(frequency)[which(colSums(known_r_data) == nrow(known_r_data))]
-# unknown_r_specific <- names(frequency)[which(colSums(unknown_r_data) == nrow(unknown_r_data))]
-# 
-# known_specific  <- known_r_specific[which(known_r_specific %nin% unknown_r_specific)]
-# unknown_specific  <- unknown_r_specific[which(unknown_r_specific %nin% known_r_specific)]
-# 
-# write(known_specific, "/home/harry/Documents/imperial/1_11_panoct/itra_known_amr_specific.txt")
-# write(unknown_specific, "/home/harry/Documents/imperial/1_11_panoct/itra_unknown_amr_specific.txt" )
 
