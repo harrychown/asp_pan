@@ -1,5 +1,12 @@
-# asp_pan
-Generating large pangenome for Aspergillus fumigatus
+# Generate a pan-genome for _Aspergillus fumigatus_
+Some scripts found within this repository were used on HPC machines, therefore these may not run on local machines. The majority of software was downloaded/installed using Conda and a Conda environment was generated for each piece.
+
+**Sequence data from 218 isolates was used to generate _A. fumigatus_ genomes**
+
+Paired-end Illumina sequencing data was obtained alongside isolate metadata. (Links to these resources will be published once made publicly available). 
+
+
+
 
 **Obtaining assembly statistics**
 
