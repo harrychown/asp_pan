@@ -47,4 +47,8 @@ cat af293.matches subset.matches > all.matches
 awk '{ print $1 }' all.matches > matched.centroids
 awk '{ print $2 }' all.matches > matched.peptides
 
-for i in `cat matched.peptides`; do printf ${i}"\t"; esearch -db protein -query ${i} | elink -target gene | esummary | xtract -pattern DocumentSummary -element Name >> matched.genes; done
+for i in `cat matched.peptides`
+do 
+eresult=$(esearch -db protein -query ${i} | elink -target gene | esummary | xtract -pattern DocumentSummary -element Name)
+echo "${i},${eresult}" >> matched.genes
+done
