@@ -1,63 +1,35 @@
-# asp_pan
-Generating large pangenome for Aspergillus fumigatus
+# Generating a pan-genome for _Aspergillus fumigatus_
 
-**Obtaining assembly statistics**
+Some scripts found within this repository were used on HPC machines, therefore these may not run on local machines. The majority of software was downloaded/installed using Conda and a Conda environment was generated for each piece.
 
-Assembly statistics were obtained using BBTOOLS (version:):
+**Sequence data from 218 isolates was used to generate _A. fumigatus_ genomes**
+
+Paired-end Illumina sequencing data was obtained alongside isolate metadata. (Links to these resources will be published once made publicly available). 
+File "assembly_pipeline.job" assembles the genomes for the isolates in parallel. 
+
+1. Raw data first passes through quality control (Trimmomatic)
+2. Genomes are then assembled (Megahit)
+3. Low-complexity regions are masked (RepeatMasker)
+4. Assembly statistcs produced (BBtools)
+5. Protein-coding regions predicted (ProtHint, GeneMark-EP+)
+6. Descriptive files generated for PanOCT input
+
+**Protein-protein homology was determined for all isolates**
+
+Parallel BLASTP searches were performed by first building a database of all proteins from the study (script: "build_blast.job") and then aligning them to the database (script: "parallel_blast.job"). During the script for database construction, PanOCT inputs were produced.
+
+**Pan-genome generation and analyses**
+
+The pan-genome was constructed using PanOCT (script: panoct.job). Subsequent analysis was performed using "panoct_data.R" and association testing carried out using Scoary (script: "scoary.sh" followed by "scoaryout.r").
+
+**Annotation of pan-genome was performed using DIAMOND**
+
+The scripts to annotate the pan-genome are also included here in "diamond.job"
+
+**Additional scripts**
+Two additional scripts are also included:
+1. Grouping gene regions for future MSA analysis ("groupcentroids.job")
+2. Generation of assembly statistics table ("generate_stats.job")
 
 
-A comparison of the number of contigs greater than 50KB was then performed to understand which of the assemblies were the most fragmented: 
 
-```
-for file in *.fa.stats
-do
-stat=$(grep "Number of scaffolds > 50 KB:" $file | cut -d$'\t' -f2)
-prefix=$(echo $file | cut -d"_" -f3 | cut -d"." -f1)
-echo "${stat},${prefix}" >> number_50kb.stats
-done
-```
-
-
-
-**Annotating the pangenome**
-
-The pangenome produced by PanOCT lacked true gene/protein names. I attempted to obtain names for these proteins by downloading all fungal proteins found on fungal OrthoDB (date accessed: 16/11/21, version: 9.1, url: https://www.orthodb.org/v9.1/index.html?page=filelist) alongside metadata tables which linked each accession to protein name and function.
-
-FASTA files were then appended together to produce a master version ("odbfungi.fa"):
-
-`cat *.fs > odbfungi.fa`
-
-Furthermore the metadata was renamed to avoid confusion:
-```
-mv data metadata.tab
-```
-
-
-A BLAST (version database from the OrthoDB fungal proteins was produced and used to query the pangenome to find homologous proteins:
-```
-makeblastdb -in odbfungi.fa -dbtype prot -out odb_blast_db
-blastp -db odb_blast_db -query centroids.fasta -outfmt 6 -max_hsps 1 -max_target_seqs 1 -out odb_search.tsv -num_threads 16
-```
-
-Results from this was then used to reannotate the pangenome FASTA and produce a centroid:accession key, enabling human-readable downstream analysis.
-```
-# Create a copy of the centroids FASTA
-cp centroids.fasta updated_centroids.fasta
-# Clear key file
-rm centroid.key
-while read line
-do
-# Extract the centroid and homologous gene accession
-centroid=$(echo $line | cut -d' ' -f1)
-gene_acc=$(echo $line | cut -d' ' -f2)
-# Use this to search up appropriate metadata
-key_line=$(grep $gene_acc metadata.tab)
-# Create a new FASTA header
-protein_id=$(echo $key_line | cut -d' ' -f4)
-protein_name=$(echo $key_line | cut -d' ' -f7- | sed 's/ /_/g' | sed 's/\//_/g' | sed 's/\\/_/g')
-new_fasta_header="${protein_id}_${protein_name}"
-# Update the FASTA file and make a key
-sed -i "s/$centroid /$new_fasta_header/g" updated_centroids.fasta
-echo "${centroid},${new_fasta_header} " >> centroid.key
-done <odb_search.tsv
-```
