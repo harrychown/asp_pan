@@ -52,3 +52,26 @@ do
 eresult=$(esearch -db protein -query ${i} | elink -target gene | esummary | xtract -pattern DocumentSummary -element Name)
 echo "${i},${eresult}" >> matched.genes
 done
+
+# IF GENE ID'S CANNOT BE FOUND EXTRACT PROTEIN TITLE
+cat matched.genes | grep ',$' > unmatched.genes
+for i in `cat unmatched.genes`
+do  
+eresult=$(esearch -db protein -query ${i} | esummary | xtract -pattern DocumentSummary -element Title)
+echo "${i},${eresult}" >> unmatched.fix.genes
+done
+
+
+cat matched.genes | grep -v ',$' > matched.fix.genes
+cat matched.fix.genes unmatched.fix.genes > peptide.info
+
+paste -d, matched.centroids matched.peptides > centroid.key
+while read line; do protein_id=$(echo $line | cut -d"," -f2); info=$(grep $protein_id peptide.info | head -n1 | cut -d"," -f2); echo ${line},${info} >> centroid.info.key; done <centroid.key
+
+# Extract only the first occurences as these have the highest alignment scores
+sort matched.centroids | uniq > unique.centroids
+while read line
+do
+grep -w $line centroid.info.key | head -n1 > centroid.info.clean.key
+done <unique.centroids
+while read line; do grep -w $line centroid.info.key | head -n1 >> centroid.info.clean.key; done <unique.centroids
