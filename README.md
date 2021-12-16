@@ -20,7 +20,7 @@ Parallel BLASTP searches were performed by first building a database of all prot
 
 **Pan-genome generation and analyses**
 
-The pan-genome was constructed using PanOCT (script: panoct.job). Subsequent analysis was performed using "panoct_data.R" and association testing carried out using Scoary (script: "scoary.sh" followed by "scoaryout.r").
+The pan-genome was constructed using PanOCT (script: panoct.job). Subsequent analysis was performed using "panoct_data.R" and association testing carried out using Scoary (script: "scoary.sh" followed by "scoaryout.r", naming dependent on DIAMOND).
 
 **Annotation of pan-genome was performed using DIAMOND**
 
