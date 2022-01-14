@@ -28,7 +28,7 @@ blastn -db genome_db -query /mnt/iusers01/pb01/f99731hc/scratch/imperial/tir.fas
 # 2) IDENTIFY ITR-ORF-ITR's
 conda activate bedtools_env
 # Generate BED files from BLAST output
-rm *.bed
+rm *.bed flanked_orfs.summary
 grep -v '^#' orf_vs_genome| perl -ane 'if($F[8]<=$F[9]){print join("\t",$F[1],$F[8]-1,$F[9],$F[0],"0","+"),"\n";}else{print join("\t",$F[1],$F[9]-1,$F[8],$F[0],"0","-"),"\n";}' | sort >> orf_vs_genome.bed
 grep -v '^#' tir_vs_genome| perl -ane 'if($F[8]<=$F[9]){print join("\t",$F[1],$F[8]-1,$F[9],$F[0],"0","+"),"\n";}else{print join("\t",$F[1],$F[9]-1,$F[8],$F[0],"0","-"),"\n";}' | sort >> tir_vs_genome.bed
 
@@ -63,3 +63,6 @@ sed -i "s/>/>$PREFIX:/g" flanked_orfs.fasta
 
 count=$(grep -c ">" flanked_orfs.fasta)
 echo $PREFIX,$count >> flanked_orfs.summary
+
+count_tir=$(grep -c "+" tir_vs_genome.bed)
+echo $PREFIX,$count_tir >> tir.summary
