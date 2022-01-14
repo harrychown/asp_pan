@@ -61,4 +61,5 @@ done <updated_orf_vs_genome.bed
 bedtools getfasta -fi $GENOME -fo flanked_orfs.fasta -bed flanked_orfs.bed
 sed -i "s/>/>$PREFIX:/g" flanked_orfs.fasta
 
-
+count=$(grep -c ">" flanked_orfs.fasta)
+echo $PREFIX,$count >> flanked_orfs.summary
