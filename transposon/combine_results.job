@@ -1,0 +1,19 @@
+#!/bin/bash --login
+#$ -cwd
+#$ -N zc
+module load apps/binapps/anaconda3/2020.07
+module load tools/env/proxy2 
+# 1) COMBINE OUTPUT FILES
+cat Afum/*/flanked_orfs.summary > total_flanked_orfs.csv
+cat Afum/*/flanked_orfs.fasta > total_flanked_orfs.fasta
+cat Afum/*/tir.summary > total_tir.csv
+cat Afum/*/flanked_orfs.fasta
+
+# 2) PERFORM ALIGNMENT
+conda activate muscle_env
+muscle -in total_flanked_orfs.fasta -out orf_aln.fasta
+
+# 3) GENERATE PHYLOGENETIC TREE
+conda activate raxml
+raxmlHPC -s orf_aln.fasta -n orf.tree -m GTR
+

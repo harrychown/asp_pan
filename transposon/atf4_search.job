@@ -1,6 +1,6 @@
 #!/bin/bash --login
 #$ -cwd
-#$ -t 1-218
+#$ -t 1-1
 #$ -N zatf4
 module load apps/binapps/anaconda3/2020.07
 module load tools/env/proxy2 
@@ -28,9 +28,15 @@ blastn -db genome_db -query /mnt/iusers01/pb01/f99731hc/scratch/imperial/tir.fas
 # 2) IDENTIFY ITR-ORF-ITR's
 conda activate bedtools_env
 # Generate BED files from BLAST output
-rm *.bed flanked_orfs.summary
+rm *.bed *.summary
 grep -v '^#' orf_vs_genome| perl -ane 'if($F[8]<=$F[9]){print join("\t",$F[1],$F[8]-1,$F[9],$F[0],"0","+"),"\n";}else{print join("\t",$F[1],$F[9]-1,$F[8],$F[0],"0","-"),"\n";}' | sort >> orf_vs_genome.bed
+# Count number of ORFs
+count_orf=$(grep -c "+" orf_vs_genome.bed)
+echo $PREFIX,$count_orf >> orf.summary
 grep -v '^#' tir_vs_genome| perl -ane 'if($F[8]<=$F[9]){print join("\t",$F[1],$F[8]-1,$F[9],$F[0],"0","+"),"\n";}else{print join("\t",$F[1],$F[9]-1,$F[8],$F[0],"0","-"),"\n";}' | sort >> tir_vs_genome.bed
+# Count number of TIR
+count_tir=$(grep -c "+" tir_vs_genome.bed)
+echo $PREFIX,$count_tir >> tir.summary
 
 # Update ORF name for downstream identification
 while read bedline
@@ -43,26 +49,74 @@ done <orf_vs_genome.bed
 grep "TIR_start" tir_vs_genome.bed > start_tir.bed
 grep "TIR_end" tir_vs_genome.bed > end_tir.bed
 
-
- 
 # Identify neighbouring regions
-bedtools closest -a updated_orf_vs_genome.bed -b start_tir.bed end_tir.bed -io -s -k 2 -mdb all > orf_near_itr.txt
+bedtools closest -a updated_orf_vs_genome.bed -b start_tir.bed end_tir.bed -io -s -k 2 -mdb all > orf_near_tir.txt
 # Identify if they are flanking and save
 while read orfline
 do
 	orf=$(echo "$orfline" | cut -d$'\t' -f4)
-	if [ $(grep $orf orf_near_itr.txt | wc -l) -eq 2 ] 
+	if [ $(grep $orf orf_near_tir.txt | wc -l) -eq 2 ] 
 	then
-		echo "$orfline" >> flanked_orfs.bed
+		# Replace updated BED with true values
+		chr=$(grep "$orf" orf_near_tir.txt | grep -P $'\t1' | cut -d$'\t' -f1)
+		name=$(grep "$orf" orf_near_tir.txt | grep -P $'\t1' | cut -d$'\t' -f4)
+		start_val=$(grep "$orf" orf_near_tir.txt | grep -P $'\t1' | cut -d$'\t' -f9)
+		end_val=$(grep "$orf" orf_near_tir.txt | grep -P $'\t2' | cut -d$'\t' -f10)
+		echo -e "$chr\t$start_val\t$end_val\t$name\t0\t+" >> flanked_orfs.bed
+		# Generate match file for downstream analysis
+		start_match=$(grep "$orf" orf_near_tir.txt | grep -P $'\t1' | cut -d$'\t' -f8-13)
+		end_match=$(grep "$orf" orf_near_tir.txt | grep -P $'\t2' | cut -d$'\t' -f8-13)
+		echo -e "$start_match\t$end_match" >> flanked_orf_tirs.bed
+
+
 	fi
 done <updated_orf_vs_genome.bed
 
 # 3) EXTRACT FLANKED ORFs SEQUENCE
 bedtools getfasta -fi $GENOME -fo flanked_orfs.fasta -bed flanked_orfs.bed
 sed -i "s/>/>$PREFIX:/g" flanked_orfs.fasta
-
+# Count number of flanked
 count=$(grep -c ">" flanked_orfs.fasta)
 echo $PREFIX,$count >> flanked_orfs.summary
 
-count_tir=$(grep -c "+" tir_vs_genome.bed)
-echo $PREFIX,$count_tir >> tir.summary
+# 4) IDENTIFY TIRs FLANKING "SOMETHING"
+bedtools closest -a start_tir.bed -b end_tir.bed  -io -iu -s -D ref > flanking_tir.txt
+grep -Pv $'\t-1' flanking_tir.txt > clean_flanking_tir.txt
+# Remove the distance column
+grep -Pv $'\t-1' flanking_tir.txt | awk '{$13=""; print $0}' | sed 's/ /\t/g'  > clean_flanking_tir.txt
+
+# 5) EXTRACT THE FLANKING REGION AND CHECK FOR ORFs
+# Reformat the bedtools output to produce a BED file
+while read flankline
+do
+	# Check whether our known ORF is found within the flanking region
+	echo $flankline
+	grep "$flankline" flanked_orf_tirs.bed
+	echo "onto the if..."
+	if ! grep -q "$flankline" flanked_orf_tirs.bed
+	then
+		wrongend=$(echo "$flankline" | cut -d$'\t' -f3)
+		rightend=$(echo "$flankline" | cut -d$'\t' -f9)
+		rightvalues=$(echo "$flankline" | sed "s/$wrongend/$rightend/g")
+		newname=$(echo "$rightvalues" | cut -d$'\t' -f1-4 | sed 's/\t/-/g')
+		newline=$(echo "$rightvalues" | sed "s/TIR_start/$newname/g" | cut -d$'\t' -f1-6)
+		# Generate a new BED for the unknown flanks
+		echo "$newline" >> unique_flanking_tir_spacer.bed
+		echo "$newline" > ufts.temp.bed
+		# Extract FA sequence
+		conda activate bedtools_env
+		bedtools getfasta -fi $GENOME -fo ufts.temp.fasta -bed ufts.temp.bed
+		sed -i "s/>/>$PREFIX:/g" ufts.temp.fasta
+		# CHECK FOR ORFs
+		conda activate emboss_env
+		getorf -min 90 ufts.temp.fasta orf.temp.fasta
+		if [ $(grep ">" orf.temp.fasta | wc -l) -gt 0 ] 
+		then
+			echo "$newline" >> unique_flanking_tir_spacer_w_orf.bed
+			cat ufts.temp.fasta >> unique_flanking_tir_spacer_w_orf.fasta
+		fi
+	fi
+done <clean_flanking_tir.txt
+
+
+
