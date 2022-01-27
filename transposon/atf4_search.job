@@ -18,105 +18,169 @@ GENOME=./megahit*/$PREFIX.contigs.fa
 # 1) PERFORM ALIGNMENTS
 conda activate blast_env
 makeblastdb -in $GENOME -dbtype nucl -out genome_db
-# Search the ORF gainst genome
-blastn -db genome_db -query /mnt/iusers01/pb01/f99731hc/scratch/imperial/orf.fasta -out orf_vs_genome -outfmt 6
+# Search the ORF against the genome
+blastn -db genome_db -query /mnt/iusers01/pb01/f99731hc/scratch/imperial/orf.fasta -out orf_plus -outfmt 6 -strand plus -evalue 0.01
+blastn -db genome_db -query /mnt/iusers01/pb01/f99731hc/scratch/imperial/orf.fasta -out orf_minus -outfmt 6 -strand minus -evalue 0.01
 # Search TIR against genome
-blastn -db genome_db -query /mnt/iusers01/pb01/f99731hc/scratch/imperial/tir.fasta -out tir_vs_genome -outfmt 6
+blastn -db genome_db -query /mnt/iusers01/pb01/f99731hc/scratch/imperial/tir.fasta -out tir_plus -outfmt 6 -strand plus -evalue 0.01
+blastn -db genome_db -query /mnt/iusers01/pb01/f99731hc/scratch/imperial/tir.fasta -out tir_minus -outfmt 6 -strand minus -evalue 0.01
 
 
-
-# 2) IDENTIFY ITR-ORF-ITR's
+# 2) GENERATE BEDFILES FROM BLAST OUTPUT
 conda activate bedtools_env
-# Generate BED files from BLAST output
-rm *.bed *.summary
-grep -v '^#' orf_vs_genome| perl -ane 'if($F[8]<=$F[9]){print join("\t",$F[1],$F[8]-1,$F[9],$F[0],"0","+"),"\n";}else{print join("\t",$F[1],$F[9]-1,$F[8],$F[0],"0","-"),"\n";}' | sort >> orf_vs_genome.bed
-# Count number of ORFs
-count_orf=$(grep -c "+" orf_vs_genome.bed)
-echo $PREFIX,$count_orf >> orf.summary
-grep -v '^#' tir_vs_genome| perl -ane 'if($F[8]<=$F[9]){print join("\t",$F[1],$F[8]-1,$F[9],$F[0],"0","+"),"\n";}else{print join("\t",$F[1],$F[9]-1,$F[8],$F[0],"0","-"),"\n";}' | sort >> tir_vs_genome.bed
-# Count number of TIR
-count_tir=$(grep -c "+" tir_vs_genome.bed)
-echo $PREFIX,$count_tir >> tir.summary
+rm *.bed *.summary *.fasta
+grep -v '^#' orf_plus| perl -ane 'if($F[8]<=$F[9]){print join("\t",$F[1],$F[8]-1,$F[9],$F[0],"0","+"),"\n";}else{print join("\t",$F[1],$F[9]-1,$F[8],$F[0],"0","-"),"\n";}' | sort >> orf_plus.bed
+grep -v '^#' orf_minus| perl -ane 'if($F[8]<=$F[9]){print join("\t",$F[1],$F[8]-1,$F[9],$F[0],"0","+"),"\n";}else{print join("\t",$F[1],$F[9]-1,$F[8],$F[0],"0","-"),"\n";}' | sort >> orf_minus.bed
+grep -v '^#' tir_plus| perl -ane 'if($F[8]<=$F[9]){print join("\t",$F[1],$F[8]-1,$F[9],$F[0],"0","+"),"\n";}else{print join("\t",$F[1],$F[9]-1,$F[8],$F[0],"0","-"),"\n";}' | sort >> tir_plus.bed
+grep -v '^#' tir_minus| perl -ane 'if($F[8]<=$F[9]){print join("\t",$F[1],$F[8]-1,$F[9],$F[0],"0","+"),"\n";}else{print join("\t",$F[1],$F[9]-1,$F[8],$F[0],"0","-"),"\n";}' | sort >> tir_minus.bed
 
-# Update ORF name for downstream identification
-while read bedline
+# 3) COUNT NUMBER OF TRUE UNIQUE ITR
+bedtools intersect -wo -a tir_plus.bed -b tir_minus.bed > tir_overlap.tsv
+bedtools intersect -v -wo -a tir_plus.bed -b tir_minus.bed > tir_plus_unique.tsv
+bedtools intersect -v -wo -a tir_minus.bed -b tir_plus.bed > tir_minus_unique.tsv
+### DATA ###
+tir_total=$(cat tir_overlap.tsv tir_plus_unique.tsv tir_minus_unique.tsv | wc -l)
+tir_partial=$(cat tir_plus_unique.tsv tir_minus_unique.tsv | wc -l)
+tir_full=$(cat tir_overlap.tsv | wc -l)
+############
+# Store full TIRs
+cat tir_overlap.tsv | cut -d$'\t' -f1-6 > full_tir_plus.bed
+cat tir_overlap.tsv | cut -d$'\t' -f7-12 > full_tir_minus.bed
+
+# 4) COUNT THE NUMBER OF ORF OVERLAPS
+### DATA ###
+orf_total=$(cat orf_plus.bed orf_minus.bed | wc -l)
+############
+
+# 5) IDENTIFY TIRs FLANKING EACH OTHER
+# NOTE: FOR PLUS STRAND START-->END, FOR MINUS STRAND END<--START BUT THE VALUES ARE IN THE CORRECT ORDER
+grep TIR_start full_tir_plus.bed > tir_start_plus.bed
+grep TIR_end full_tir_plus.bed > tir_end_plus.bed
+bedtools closest -io -s -iu -D a -a tir_start_plus.bed -b tir_end_plus.bed > tmp.closest.txt
+awk '$13<10000' tmp.closest.txt > tir_tir_plus.closest.txt
+
+grep TIR_start full_tir_minus.bed > tir_start_minus.bed
+grep TIR_end full_tir_minus.bed > tir_end_minus.bed
+bedtools closest -io -s -iu -D b -a tir_end_minus.bed -b tir_start_minus.bed > tmp.closest.txt
+awk '$13<10000' tmp.closest.txt > tir_tir_minus.closest.txt
+
+# Convert these flanks into a locus 
+while read line
 do
-	newname=$(echo "$bedline" | cut -d$'\t' -f1-4 | sed 's/\t/-/g')
-	echo "$bedline" | sed "s/atf4_orf/$newname/g" >> updated_orf_vs_genome.bed
-done <orf_vs_genome.bed
+	chr=$(echo "$line" | cut -d$'\t' -f1)
+	start=$(echo "$line" | cut -d$'\t' -f3)
+	stop=$(echo "$line" | cut -d$'\t' -f8)
+	name="${chr}_${start}_${stop}"
+	echo -e "$chr\t$start\t$stop\t$name\t0\t+" >> tir_tir_plus_flank.bed
+done <tir_tir_plus.closest.txt
 
-# Separate TIRs into start and end files
-grep "TIR_start" tir_vs_genome.bed > start_tir.bed
-grep "TIR_end" tir_vs_genome.bed > end_tir.bed
-
-# Identify neighbouring regions
-bedtools closest -a updated_orf_vs_genome.bed -b start_tir.bed end_tir.bed -io -s -k 2 -mdb all > orf_near_tir.txt
-# Identify if they are flanking and save
-while read orfline
+while read line
 do
-	orf=$(echo "$orfline" | cut -d$'\t' -f4)
-	if [ $(grep $orf orf_near_tir.txt | wc -l) -eq 2 ] 
+	chr=$(echo "$line" | cut -d$'\t' -f1)
+	start=$(echo "$line" | cut -d$'\t' -f3)
+	stop=$(echo "$line" | cut -d$'\t' -f8)
+	name="${chr}_${start}_${stop}"
+	echo -e "$chr\t$start\t$stop\t$name\t0\t-" >> tir_tir_minus_flank.bed
+done <tir_tir_minus.closest.txt
+# Count the number of TIRs next to each other within 10kb
+### DATA ###
+tir_flank_total=$(cat tir_tir_plus_flank.bed | wc -l)
+############
+
+# 6) IDENTIFY IF ANY ORFs ARE IN BETWEEN TIRs
+bedtools intersect -wo -a tir_tir_plus_flank.bed -b orf_plus.bed > tir_orf_tir_plus.tsv
+while read line
+do
+	chr=$(echo "$line" | cut -d$'\t' -f7)
+	startloc=$(echo "$line" | cut -d$'\t' -f8)
+	stoploc=$(echo "$line" | cut -d$'\t' -f9)
+	nameloc="${chr}_${startloc}_${stoploc}"
+	echo -e "$chr\t$startloc\t$stoploc\t$nameloc\t0\t+" >> tir_orf_tir_plus.loc.bed
+
+	chr=$(echo "$line" | cut -d$'\t' -f7)
+	startorf=$(echo "$line" | cut -d$'\t' -f8)
+	stoporf=$(echo "$line" | cut -d$'\t' -f9)
+	nameorf="${chr}_${startorf}_${stoporf}"
+	echo -e "$chr\t$startorf\t$stoporf\t$nameorf\t0\t+" >> tir_orf_tir_plus.orf.bed
+done <tir_orf_tir_plus.tsv
+
+
+
+bedtools intersect -wo -a tir_tir_minus_flank.bed -b orf_minus.bed > tir_orf_tir_minus.tsv
+while read line
+do
+	chr=$(echo "$line" | cut -d$'\t' -f7)
+	startloc=$(echo "$line" | cut -d$'\t' -f8)
+	stoploc=$(echo "$line" | cut -d$'\t' -f9)
+	nameloc="${chr}_${startloc}_${stoploc}"
+	echo -e "$chr\t$startloc\t$stoploc\t$nameloc\t0\t-" >> tir_orf_tir_minus.loc.bed
+
+	chr=$(echo "$line" | cut -d$'\t' -f7)
+	startorf=$(echo "$line" | cut -d$'\t' -f8)
+	stoporf=$(echo "$line" | cut -d$'\t' -f9)
+	nameorf="${chr}_${startorf}_${stoporf}"
+	echo -e "$chr\t$startorf\t$stoporf\t$nameorf\t0\t-" >> tir_orf_tir_minus.orf.bed
+done <tir_orf_tir_minus.tsv
+
+cat tir_orf_tir_plus.orf.bed tir_orf_tir_minus.orf.bed > tir_orf_tir.orf.bed
+cat tir_orf_tir_plus.loc.bed tir_orf_tir_minus.loc.bed > tir_orf_tir.loc.bed
+### DATA ###
+tir_orf_tir_total=$(cat tir_orf_tir.orf.bed| wc -l)
+############
+
+# 7) EXTRACT tORFs with NO FLANKS
+bedtools intersect -v -a orf_plus.bed -b tir_tir_plus_flank.bed > orf_noflank_plus.orf.bed
+bedtools intersect -v -a orf_minus.bed -b tir_tir_minus_flank.bed > orf_noflank_minus.orf.bed
+cat orf_noflank_plus.orf.bed orf_noflank_minus.orf.bed > orf_noflank_total.bed
+### DATA ###
+orf_no_flank_total=$(cat orf_noflank_total.bed | wc -l)
+############
+
+
+# 8) EXTRACT FLANKS WITH NO tORF (nuorf)
+bedtools intersect -v -a tir_tir_plus_flank.bed -b orf_plus.bed orf_minus.bed > tir_possorf_tir_plus.loc.bed
+bedtools intersect -v -a tir_tir_minus_flank.bed -b orf_plus.bed orf_minus.bed > tir_possorf_tir_minus.loc.bed
+cat tir_possorf_tir_plus.loc.bed tir_possorf_tir_minus.loc.bed > tir_possorf_tir_all.loc.bed
+
+# Check ORFs within each section
+while read line
+do
+	echo "$line" > tmp.bed
+	conda activate bedtools_env
+	bedtools getfasta -fi $GENOME -fo tmp.fa -bed tmp.bed
+	# Extract nuorf sequences and check for ORFs
+	conda activate emboss_env
+	getorf -min 90 tmp.fa orf.tmp.fa
+	if [ $(grep ">" orf.tmp.fa | wc -l) -gt 0 ] 
 	then
-		# Replace updated BED with true values
-		chr=$(grep "$orf" orf_near_tir.txt | grep -P $'\t1' | cut -d$'\t' -f1)
-		name=$(grep "$orf" orf_near_tir.txt | grep -P $'\t1' | cut -d$'\t' -f4)
-		start_val=$(grep "$orf" orf_near_tir.txt | grep -P $'\t1' | cut -d$'\t' -f9)
-		end_val=$(grep "$orf" orf_near_tir.txt | grep -P $'\t2' | cut -d$'\t' -f10)
-		echo -e "$chr\t$start_val\t$end_val\t$name\t0\t+" >> flanked_orfs.bed
-		# Generate match file for downstream analysis
-		start_match=$(grep "$orf" orf_near_tir.txt | grep -P $'\t1' | cut -d$'\t' -f8-13)
-		end_match=$(grep "$orf" orf_near_tir.txt | grep -P $'\t2' | cut -d$'\t' -f8-13)
-		echo -e "$start_match\t$end_match" >> flanked_orf_tirs.bed
-
-
+	# BED with unique TIR-ORF-TIR
+		echo "$line" >> tir_uorf_tir_all.loc.bed
+	else
+	# BED with NO unique TIR-ORF-TIR
+		echo "$line" >> tir_nuorf_tir_all.loc.bed
 	fi
-done <updated_orf_vs_genome.bed
+done <tir_possorf_tir_all.loc.bed
 
-# 3) EXTRACT FLANKED ORFs SEQUENCE
-bedtools getfasta -fi $GENOME -fo flanked_orfs.fasta -bed flanked_orfs.bed
-sed -i "s/>/>$PREFIX:/g" flanked_orfs.fasta
-# Count number of flanked
-count=$(grep -c ">" flanked_orfs.fasta)
-echo $PREFIX,$count >> flanked_orfs.summary
-
-# 4) IDENTIFY TIRs FLANKING "SOMETHING"
-bedtools closest -a start_tir.bed -b end_tir.bed  -io -iu -s -D ref > flanking_tir.txt
-grep -Pv $'\t-1' flanking_tir.txt > clean_flanking_tir.txt
-# Remove the distance column
-grep -Pv $'\t-1' flanking_tir.txt | awk '{$13=""; print $0}' | sed 's/ /\t/g'  > clean_flanking_tir.txt
-
-# 5) EXTRACT THE FLANKING REGION AND CHECK FOR ORFs
-# Reformat the bedtools output to produce a BED file
-while read flankline
-do
-	# Check whether our known ORF is found within the flanking region
-	echo $flankline
-	grep "$flankline" flanked_orf_tirs.bed
-	echo "onto the if..."
-	if ! grep -q "$flankline" flanked_orf_tirs.bed
-	then
-		wrongend=$(echo "$flankline" | cut -d$'\t' -f3)
-		rightend=$(echo "$flankline" | cut -d$'\t' -f9)
-		rightvalues=$(echo "$flankline" | sed "s/$wrongend/$rightend/g")
-		newname=$(echo "$rightvalues" | cut -d$'\t' -f1-4 | sed 's/\t/-/g')
-		newline=$(echo "$rightvalues" | sed "s/TIR_start/$newname/g" | cut -d$'\t' -f1-6)
-		# Generate a new BED for the unknown flanks
-		echo "$newline" >> unique_flanking_tir_spacer.bed
-		echo "$newline" > ufts.temp.bed
-		# Extract FA sequence
-		conda activate bedtools_env
-		bedtools getfasta -fi $GENOME -fo ufts.temp.fasta -bed ufts.temp.bed
-		sed -i "s/>/>$PREFIX:/g" ufts.temp.fasta
-		# CHECK FOR ORFs
-		conda activate emboss_env
-		getorf -min 90 ufts.temp.fasta orf.temp.fasta
-		if [ $(grep ">" orf.temp.fasta | wc -l) -gt 0 ] 
-		then
-			echo "$newline" >> unique_flanking_tir_spacer_w_orf.bed
-			cat ufts.temp.fasta >> unique_flanking_tir_spacer_w_orf.fasta
-		fi
-	fi
-done <clean_flanking_tir.txt
+### DATA ###
+# Flanking TIRs without our original tORF
+possorf_flank_total=$(cat tir_possorf_tir_all.loc.bed | wc -l)
+# Flanking TIRs with a unique ORF
+uorf_flank_total=$(cat tir_uorf_tir_all.loc.bed | wc -l)
+# Flanking TIRs with NO ORF
+nuorf_flank_total=$(cat tir_nuorf_tir_all.loc.bed | wc -l)
+############
 
 
+# 9) SAVE ALL OF THE SEQUENCE INFO
+conda activate bedtools_env
+# ORF/loci with flanks
+bedtools getfasta -fo tir_orf_tir.orf.fa -fi $GENOME -bed tir_orf_tir.orf.bed
+bedtools getfasta -fo tir_orf_tir.loc.fa -fi $GENOME -bed tir_orf_tir.loc.bed
+# ORF with no flanks
+bedtools getfasta -fo orf_no_tir.orf.fa -fi $GENOME -bed orf_noflank_total.bed
+# Flanks with new ORF
+bedtools getfasta -fo tir_unknownorf_tir.loc.fa -fi $GENOME -bed tir_uorf_tir_all.loc.bed
+
+# 10) SAVE ALL THE DESCRIPTION INFO
+echo "${PREFIX},${tir_total},${tir_full},${tir_partial},${orf_total},${tir_flank_total},${tir_orf_tir_total},${orf_no_flank_total},${possorf_flank_total},${uorf_flank_total},${nuorf_flank_total}" > atf4.summary
 
