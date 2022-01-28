@@ -3,17 +3,27 @@
 #$ -N zc
 module load apps/binapps/anaconda3/2020.07
 module load tools/env/proxy2 
-# 1) COMBINE OUTPUT FILES
-cat Afum/*/flanked_orfs.summary > total_flanked_orfs.csv
-cat Afum/*/flanked_orfs.fasta > total_flanked_orfs.fasta
-cat Afum/*/tir.summary > total_tir.csv
-cat Afum/*/flanked_orfs.fasta
 
-# 2) PERFORM ALIGNMENT
+
+conda activate bedtools_env
+# 1) SAVE SEQUENCE DATA
+# ORF/loci with flanks
+cat Afum/*/tir_orf_tir.orf.fa > TIR_atf4_TIR.orf.fa
+cat Afum/*/tir_orf_tir.loc.fa > TIR_atf4_TIR.loc.fa
+# ORF with no flanks
+cat Afum/*/orf_no_tir.orf.fa > atf4.orf.fa
+# Flanks with new ORF
+cat Afum/*/tir_unknownorf_tir.all.loc.fa > TIR_uORF_TIR.loc.fa
+
+# 2) SAVE SUMMARY DATA
+cat Afum/*/atf4.summary > search_atf4.summary.csv
+
+# 3) PERFORM ALIGNMENT
 conda activate muscle_env
-muscle -in total_flanked_orfs.fasta -out orf_aln.fasta
+muscle -in TIR_atf4_TIR.orf.fa -out TIR_atf4_TIR.aln.fasta
 
 # 3) GENERATE PHYLOGENETIC TREE
 conda activate raxml
-raxmlHPC -s orf_aln.fasta -n orf.tree -m GTR
+sed "s/:.*//" TIR_atf4_TIR.aln.fasta > TIR_atf4_TIR.tmp.aln.fasta
+raxmlHPC -s TIR_atf4_TIR.tmp.aln.fasta -n TIR_atf4_TIR.tree -m GTRGAMMA
 

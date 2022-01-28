@@ -1,6 +1,6 @@
 #!/bin/bash --login
 #$ -cwd
-#$ -t 1-1
+#$ -t 1-218
 #$ -N zatf4
 module load apps/binapps/anaconda3/2020.07
 module load tools/env/proxy2 
@@ -92,8 +92,8 @@ bedtools intersect -wo -a tir_tir_plus_flank.bed -b orf_plus.bed > tir_orf_tir_p
 while read line
 do
 	chr=$(echo "$line" | cut -d$'\t' -f7)
-	startloc=$(echo "$line" | cut -d$'\t' -f8)
-	stoploc=$(echo "$line" | cut -d$'\t' -f9)
+	startloc=$(echo "$line" | cut -d$'\t' -f2)
+	stoploc=$(echo "$line" | cut -d$'\t' -f3)
 	nameloc="${chr}_${startloc}_${stoploc}"
 	echo -e "$chr\t$startloc\t$stoploc\t$nameloc\t0\t+" >> tir_orf_tir_plus.loc.bed
 
@@ -110,8 +110,8 @@ bedtools intersect -wo -a tir_tir_minus_flank.bed -b orf_minus.bed > tir_orf_tir
 while read line
 do
 	chr=$(echo "$line" | cut -d$'\t' -f7)
-	startloc=$(echo "$line" | cut -d$'\t' -f8)
-	stoploc=$(echo "$line" | cut -d$'\t' -f9)
+	startloc=$(echo "$line" | cut -d$'\t' -f2)
+	stoploc=$(echo "$line" | cut -d$'\t' -f3)
 	nameloc="${chr}_${startloc}_${stoploc}"
 	echo -e "$chr\t$startloc\t$stoploc\t$nameloc\t0\t-" >> tir_orf_tir_minus.loc.bed
 
@@ -140,47 +140,87 @@ orf_no_flank_total=$(cat orf_noflank_total.bed | wc -l)
 # 8) EXTRACT FLANKS WITH NO tORF (nuorf)
 bedtools intersect -v -a tir_tir_plus_flank.bed -b orf_plus.bed orf_minus.bed > tir_possorf_tir_plus.loc.bed
 bedtools intersect -v -a tir_tir_minus_flank.bed -b orf_plus.bed orf_minus.bed > tir_possorf_tir_minus.loc.bed
+# Check for unique flanks i.e if the same flank is found on the plus/minus strand exclude this from being "unique"
 cat tir_possorf_tir_plus.loc.bed tir_possorf_tir_minus.loc.bed > tir_possorf_tir_all.loc.bed
+sed 's/+/-/g' tir_possorf_tir_all.loc.bed | sort | uniq > unique.tir_possorf_tir_all.loc.bed
 
 # Check ORFs within each section
 while read line
 do
 	echo "$line" > tmp.bed
 	conda activate bedtools_env
-	bedtools getfasta -fi $GENOME -fo tmp.fa -bed tmp.bed
+	bedtools getfasta -s -fi $GENOME -fo tmp.fa -bed tmp.bed
 	# Extract nuorf sequences and check for ORFs
 	conda activate emboss_env
 	getorf -min 90 tmp.fa orf.tmp.fa
 	if [ $(grep ">" orf.tmp.fa | wc -l) -gt 0 ] 
 	then
 	# BED with unique TIR-ORF-TIR
-		echo "$line" >> tir_uorf_tir_all.loc.bed
+		echo "$line" >> tir_uorf_tir_plus.loc.bed
 	else
 	# BED with NO unique TIR-ORF-TIR
-		echo "$line" >> tir_nuorf_tir_all.loc.bed
+		echo "$line" >> tir_nuorf_tir_plus.loc.bed
 	fi
-done <tir_possorf_tir_all.loc.bed
+done <tir_possorf_tir_plus.loc.bed
+
+while read line
+do
+	echo "$line" > tmp.bed
+	conda activate bedtools_env
+	bedtools getfasta -s -fi $GENOME -fo tmp.fa -bed tmp.bed
+	# Extract nuorf sequences and check for ORFs
+	conda activate emboss_env
+	getorf -min 90 tmp.fa orf.tmp.fa
+	if [ $(grep ">" orf.tmp.fa | wc -l) -gt 0 ] 
+	then
+	# BED with unique TIR-ORF-TIR
+		echo "$line" >> tir_uorf_tir_minus.loc.bed
+	else
+	# BED with NO unique TIR-ORF-TIR
+		echo "$line" >> tir_nuorf_tir_minus.loc.bed
+	fi
+done <tir_possorf_tir_minus.loc.bed
+
+# Extract sequences which have an ORF on either or both strands
+cat tir_uorf_tir_minus.loc.bed tir_uorf_tir_plus.loc.bed > tir_uorf_tir_all.loc.bed
+awk '{ print $4 }' tir_uorf_tir_all.loc.bed | sort | uniq -c > tir_uorf_tir_all.loc.counts
+urof_flank_single_dir=$(awk '$1<2' tir_uorf_tir_all.loc.counts | wc -l)
+urof_flank_multi_dir=$(awk '$1>1' tir_uorf_tir_all.loc.counts | wc -l)
+
+
+# Extract sequences which do not have an ORF on a single strand (min.)
+cat tir_nuorf_tir_minus.loc.bed tir_nuorf_tir_plus.loc.bed | awk '{ print $4 }' | sort | uniq -c > tir_nuorf_tir_all.loc.counts
+
 
 ### DATA ###
 # Flanking TIRs without our original tORF
-possorf_flank_total=$(cat tir_possorf_tir_all.loc.bed | wc -l)
+possorf_flank_total=$(cat unique.tir_possorf_tir_all.loc.bed | wc -l)
+possorf_flank_plus_total=$(cat tir_possorf_tir_plus.loc.bed | wc -l)
+possorf_flank_minus_total=$(cat tir_possorf_tir_minus.loc.bed | wc -l)
 # Flanking TIRs with a unique ORF
-uorf_flank_total=$(cat tir_uorf_tir_all.loc.bed | wc -l)
+uorf_flank_total=$(cat tir_uorf_tir_all.loc.counts | wc -l)
 # Flanking TIRs with NO ORF
-nuorf_flank_total=$(cat tir_nuorf_tir_all.loc.bed | wc -l)
+nuorf_flank_total=$(cat tir_nuorf_tir_all.loc.counts | wc -l)
 ############
 
 
 # 9) SAVE ALL OF THE SEQUENCE INFO
 conda activate bedtools_env
 # ORF/loci with flanks
-bedtools getfasta -fo tir_orf_tir.orf.fa -fi $GENOME -bed tir_orf_tir.orf.bed
-bedtools getfasta -fo tir_orf_tir.loc.fa -fi $GENOME -bed tir_orf_tir.loc.bed
+bedtools getfasta -s -fo tir_orf_tir.orf.fa -fi $GENOME -bed tir_orf_tir.orf.bed
+bedtools getfasta -s -fo tir_orf_tir.loc.fa -fi $GENOME -bed tir_orf_tir.loc.bed
 # ORF with no flanks
-bedtools getfasta -fo orf_no_tir.orf.fa -fi $GENOME -bed orf_noflank_total.bed
+bedtools getfasta -s -fo orf_no_tir.orf.fa -fi $GENOME -bed orf_noflank_total.bed
 # Flanks with new ORF
-bedtools getfasta -fo tir_unknownorf_tir.loc.fa -fi $GENOME -bed tir_uorf_tir_all.loc.bed
+bedtools getfasta -s -fo tir_unknownorf_tir.all.loc.fa -fi $GENOME -bed tir_uorf_tir_all.loc.bed
+
+
+sed -i "s/>/>${GENOME}_/g" tir_orf_tir.orf.fa
+sed -i "s/>/>${GENOME}_/g"tir_orf_tir.loc.fa
+sed -i "s/>/>${GENOME}_/g" orf_no_tir.orf.fa
+sed -i "s/>/>${GENOME}_/g" tir_unknownorf_tir.all.loc.fa
+
 
 # 10) SAVE ALL THE DESCRIPTION INFO
-echo "${PREFIX},${tir_total},${tir_full},${tir_partial},${orf_total},${tir_flank_total},${tir_orf_tir_total},${orf_no_flank_total},${possorf_flank_total},${uorf_flank_total},${nuorf_flank_total}" > atf4.summary
+echo "${PREFIX},${tir_total},${tir_full},${tir_partial},${orf_total},${tir_flank_total},${tir_orf_tir_total},${orf_no_flank_total},${possorf_flank_total},${uorf_flank_total},${urof_flank_single_dir},${urof_flank_multi_dir},${nuorf_flank_total}" > atf4.summary
 
