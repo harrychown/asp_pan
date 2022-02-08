@@ -28,7 +28,7 @@ blastn -db genome_db -query /mnt/iusers01/pb01/f99731hc/scratch/imperial/tir.fas
 
 # 2) GENERATE BEDFILES FROM BLAST OUTPUT
 conda activate bedtools_env
-rm *.bed *.summary *.fasta
+rm *.bed *.summary *.fasta *.loc.counts
 grep -v '^#' orf_plus| perl -ane 'if($F[8]<=$F[9]){print join("\t",$F[1],$F[8]-1,$F[9],$F[0],"0","+"),"\n";}else{print join("\t",$F[1],$F[9]-1,$F[8],$F[0],"0","-"),"\n";}' | sort >> orf_plus.tmp.bed
 grep -v '^#' orf_minus| perl -ane 'if($F[8]<=$F[9]){print join("\t",$F[1],$F[8]-1,$F[9],$F[0],"0","+"),"\n";}else{print join("\t",$F[1],$F[9]-1,$F[8],$F[0],"0","-"),"\n";}' | sort >> orf_minus.tmp.bed
 grep -v '^#' tir_plus| perl -ane 'if($F[8]<=$F[9]){print join("\t",$F[1],$F[8]-1,$F[9],$F[0],"0","+"),"\n";}else{print join("\t",$F[1],$F[9]-1,$F[8],$F[0],"0","-"),"\n";}' | sort >> tir_plus.bed
@@ -200,7 +200,7 @@ do
 	bedtools getfasta -s -fi $GENOME -fo tmp.fa -bed tmp.bed
 	# Extract nuorf sequences and check for ORFs
 	conda activate emboss_env
-	getorf -min 90 tmp.fa orf.tmp.fa
+	getorf -min 280 -reverse N -find 1 tmp.fa orf.tmp.fa
 	if [ $(grep ">" orf.tmp.fa | wc -l) -gt 0 ] 
 	then
 	# BED with unique TIR-ORF-TIR
@@ -218,7 +218,7 @@ do
 	bedtools getfasta -s -fi $GENOME -fo tmp.fa -bed tmp.bed
 	# Extract nuorf sequences and check for ORFs
 	conda activate emboss_env
-	getorf -min 90 tmp.fa orf.tmp.fa
+	getorf -min 280 -reverse N -find 1 tmp.fa orf.tmp.fa
 	if [ $(grep ">" orf.tmp.fa | wc -l) -gt 0 ] 
 	then
 	# BED with unique TIR-ORF-TIR
@@ -252,6 +252,11 @@ nuorf_flank_total=$(cat tir_nuorf_tir_all.loc.counts | wc -l)
 ############
 
 
+# 9) EXTRACT 100BP +/- TIR FLANKS
+awk '{$2-=100;$3+=100}1' OFS='\t' tir_orf_tir.loc.bed > tir_orf_tir.flank.bed
+awk '{$2-=100;$3=$2+100}1' OFS='\t' tir_orf_tir.loc.bed > start.flank.bed
+awk '{$2=$3;$3=$2+100}1' OFS='\t' tir_orf_tir.loc.bed > end.flank.bed
+
 # 9) SAVE ALL OF THE SEQUENCE INFO
 conda activate bedtools_env
 # ORF/loci with flanks
@@ -261,13 +266,20 @@ bedtools getfasta -s -fo tir_orf_tir.loc.fa -fi $GENOME -bed tir_orf_tir.loc.bed
 bedtools getfasta -s -fo orf_no_tir.orf.fa -fi $GENOME -bed orf_noflank_total.bed
 # Flanks with new ORF
 bedtools getfasta -s -fo tir_unknownorf_tir.all.loc.fa -fi $GENOME -bed tir_uorf_tir_all.loc.bed
+# 100BP regions
+bedtools getfasta -s -fo tir_orf_tir.flank.fa -fi $GENOME -bed tir_orf_tir.flank.bed
+bedtools getfasta -s -fo start.flank.fa -fi $GENOME -bed start.flank.bed
+bedtools getfasta -s -fo end.flank.fa -fi $GENOME -bed end.flank.bed
+
 
 
 sed -i "s/>/>${PREFIX}_/g" tir_orf_tir.orf.fa
 sed -i "s/>/>${PREFIX}_/g"tir_orf_tir.loc.fa
 sed -i "s/>/>${PREFIX}_/g" orf_no_tir.orf.fa
 sed -i "s/>/>${PREFIX}_/g" tir_unknownorf_tir.all.loc.fa
-
+sed -i "s/>/>${PREFIX}_/g" tir_orf_tir.flank.fa
+sed -i "s/>/>${PREFIX}_/g" start.flank.fa
+sed -i "s/>/>${PREFIX}_/g" end.flank.fa
 
 # 10) SAVE ALL THE DESCRIPTION INFO
 echo "${PREFIX},${tir_total},${tir_full},${tir_partial},${orf_total},${tir_flank_total},${tir_orf_tir_total},${orf_no_flank_total},${possorf_flank_total},${uorf_flank_total},${urof_flank_single_dir},${urof_flank_multi_dir},${nuorf_flank_total}" > atf4.summary
