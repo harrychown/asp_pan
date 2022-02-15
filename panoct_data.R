@@ -4,7 +4,8 @@ library("tidyverse")
 library("micropan")
 library("ggplot2")
 library("VennDiagram")
-library("rstudioapi")   
+library("rstudioapi")
+library("venn")
 setwd(dirname(getActiveDocumentContext()$path))     
 # Read config file for input/output directories
 directory_configuration <- readLines("directory.config")
@@ -307,3 +308,14 @@ p
 dev.off()
 }
 
+### EXTRACT ALL CLADE A/B GENES ###
+tbd <- t(binary_data)
+cladeAbd <- tbd[clean_meta$Pangenome.id[which(clean_meta$Clade == "A")], ]
+cladeAcentroids <- rownames(binary_data)[which(colSums(cladeAbd)>0)]
+write(cladeAcentroids, fullpath("cladeA_centroids.txt"))
+
+cladeBbd <- tbd[clean_meta$Pangenome.id[which(clean_meta$Clade == "B")], ]
+cladeBcentroids <- rownames(binary_data)[which(colSums(cladeBbd)>0)]
+write(cladeBcentroids, fullpath("cladeB_centroids.txt"))
+
+cladeABvenn <- venn(list("A"=cladeAcentroids,"B"=cladeBcentroids))
