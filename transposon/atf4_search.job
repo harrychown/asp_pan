@@ -340,9 +340,9 @@ sed -i "s/>/>${PREFIX}_/g" tir_unknownorf_tir.all.loc.fa
 sed -i "s/>/>${PREFIX}_/g" tir_orf_tir.flank.fa
 sed -i "s/>/>${PREFIX}_/g" start.flank.fa
 sed -i "s/>/>${PREFIX}_/g" end.flank.fa
-sed -i "s/>/>${PREFIX}_/g" x38.synt.fa
-sed -i "s/>/>${PREFIX}_/g" x969.synt.fa
-sed -i "s/>/>${PREFIX}_/g" ux.synt.fa
+sed -i "s/>/>${PREFIX}_posA_/g" x38.synt.fa
+sed -i "s/>/>${PREFIX}_posB_/g" x969.synt.fa
+sed -i "s/>/>${PREFIX}_posC_/g" ux.synt.fa
 
 # 10) SAVE ALL THE DESCRIPTION INFO
 echo "${PREFIX},${tir_total},${tir_full},${tir_partial},${orf_total},${tir_flank_total},${tir_orf_tir_total},${orf_no_flank_total},${possorf_flank_total},${uorf_flank_total},${urof_flank_single_dir},${urof_flank_multi_dir},${nuorf_flank_total},${synt38total},${synt969total},${syntUtotal}" > atf4.summary
