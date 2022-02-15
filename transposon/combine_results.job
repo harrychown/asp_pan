@@ -15,15 +15,46 @@ cat Afum/*/orf_no_tir.orf.fa > atf4.orf.fa
 # Flanks with new ORF
 cat Afum/*/tir_unknownorf_tir.all.loc.fa > TIR_uORF_TIR.loc.fa
 
-# 2) SAVE SUMMARY DATA
-cat Afum/*/atf4.summary > search_atf4.summary.csv
+# 100 BP flanks
+cat Afum/*/start.flank.fa > START.flank.fa.tmp
+cat Afum/*/end.flank.fa > END.flank.fa.tmp
+cat Afum/*/tir_orf_tir.flank.fa > tir_orf_tir.flank.fa.tmp
 
+# Total Atf4 with original
+cat TIR_atf4_TIR.orf.fa atf4.orf.fa origin_atf4.fa > atf4_total.orf.fa.tmp
+
+# 2) SAVE SUMMARY DATA
+echo "isolate,synteny 38x,synteny 969x,synteny U" > pident_atf.summary.csv
+cat Afum/*/pident.summary >> pident_atf.summary.csv
+
+
+echo "isolate,TIR total,Full TIRs,Partial TIRs,Atf4 Homologs,Flanking TIRs,TIR-Atf4-TIR,Atf4 with no flanks,Flanking TIRs minus TIR-Atf4-TIR,TIR-uORF-TIR,TIR-uORF-TIR single strand,TIR-uORF-TIR double stranded,TIR-TIR (no ORF),synteny 38x,synteny 969x,synteny U" > search_atf.summary.csv
+cat Afum/*/atf4.summary >> search_atf.summary.csv
+
+cat Afum/*/synteny.summary > synteny_atf.summary.csv
+awk -F ',' '{ print $2,$3 }' synteny_atf.summary.csv | sort | uniq -c > synteny_atf.freq.csv
+
+
+
+: <<'END'
+
+for file in *.fa.tmp
+do
+prefix=$(echo "$file" | sed "s/.fa.tmp//")
+sed "s/:/@/g" $file | sed "s/-/_/g" | sed "s/(.*//" > $prefix.fa
 # 3) PERFORM ALIGNMENT
 conda activate muscle_env
-muscle -in TIR_atf4_TIR.orf.fa -out TIR_atf4_TIR.aln.fasta
+muscle -in $prefix.fa -fastaout $prefix.aln.fa -physout $prefix.phylip
 
-# 3) GENERATE PHYLOGENETIC TREE
+# 4) GENERATE PHYLOGENETIC TREE
 conda activate raxml
-sed "s/:.*//" TIR_atf4_TIR.aln.fasta > TIR_atf4_TIR.tmp.aln.fasta
-raxmlHPC -s TIR_atf4_TIR.tmp.aln.fasta -n TIR_atf4_TIR.tree -m GTRGAMMA
+raxmlHPC -s $prefix.phylip -n $prefix.tree -m GTRGAMMA
 
+done
+
+END
+
+
+rm -rf transposon_out
+mkdir transposon_out
+mv TIR* atf4.orf.fa search_atf.summary.csv synteny_atf.freq.csv  *.flank.fa ./transposon_out

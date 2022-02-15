@@ -25,7 +25,6 @@ blastn -db genome_db -query /mnt/iusers01/pb01/f99731hc/scratch/imperial/orf.fas
 blastn -db genome_db -query /mnt/iusers01/pb01/f99731hc/scratch/imperial/tir.fasta -out tir_plus -outfmt 6 -strand plus -evalue 0.01
 blastn -db genome_db -query /mnt/iusers01/pb01/f99731hc/scratch/imperial/tir.fasta -out tir_minus -outfmt 6 -strand minus -evalue 0.01
 
-
 # 2) GENERATE BEDFILES FROM BLAST OUTPUT
 conda activate bedtools_env
 rm *.bed *.summary *.fasta *.loc.counts
@@ -33,6 +32,7 @@ grep -v '^#' orf_plus| perl -ane 'if($F[8]<=$F[9]){print join("\t",$F[1],$F[8]-1
 grep -v '^#' orf_minus| perl -ane 'if($F[8]<=$F[9]){print join("\t",$F[1],$F[8]-1,$F[9],$F[0],"0","+"),"\n";}else{print join("\t",$F[1],$F[9]-1,$F[8],$F[0],"0","-"),"\n";}' | sort >> orf_minus.tmp.bed
 grep -v '^#' tir_plus| perl -ane 'if($F[8]<=$F[9]){print join("\t",$F[1],$F[8]-1,$F[9],$F[0],"0","+"),"\n";}else{print join("\t",$F[1],$F[9]-1,$F[8],$F[0],"0","-"),"\n";}' | sort >> tir_plus.bed
 grep -v '^#' tir_minus| perl -ane 'if($F[8]<=$F[9]){print join("\t",$F[1],$F[8]-1,$F[9],$F[0],"0","+"),"\n";}else{print join("\t",$F[1],$F[9]-1,$F[8],$F[0],"0","-"),"\n";}' | sort >> tir_minus.bed
+
 
 while read line
 do
@@ -257,6 +257,63 @@ awk '{$2-=100;$3+=100}1' OFS='\t' tir_orf_tir.loc.bed > tir_orf_tir.flank.bed
 awk '{$2-=100;$3=$2+100}1' OFS='\t' tir_orf_tir.loc.bed > start.flank.bed
 awk '{$2=$3;$3=$2+100}1' OFS='\t' tir_orf_tir.loc.bed > end.flank.bed
 
+
+# 10) IDENTIFY SYNTENY OF FLANKING GENES
+# Convert gene GTF to bed file
+conda activate bedops_env
+gtf2bed < gene.gtf > gene.bed
+# Identify anything within 700bp upstream and downstream
+# Check against pan-genome and save centroid ID
+while read line
+do
+	conda activate bedtools_env
+	# UP'n'DOWN
+	echo "$line" > tmp.closest.txt
+	upstream_gene_id=$(bedtools closest -io -s -id -D a -a tmp.closest.txt -b gene.bed  | awk '$20<0' | cut -d$'\t' -f10)
+	downstream_gene_id=$(bedtools closest -io -s -iu -D a -a tmp.closest.txt -b gene.bed | awk '$20>0' | cut -d$'\t' -f10) 
+	
+	# Extract fasta and perform pairwise comparison against putative ORF
+	bedtools getfasta -s -fo tmp.fa -fi $GENOME -bed tmp.closest.txt
+	conda activate emboss_env
+	/mnt/iusers01/pb01/f99731hc/scratch/imperial/origin_atf4.fa
+	
+	# Pangenome search
+	if [ ! -z "$upstream_gene_id" ]
+	then
+		up_num=$(grep -F "${upstream_gene_id}" /mnt/iusers01/pb01/f99731hc/scratch/imperial/matchtable.txt | cut -d$'\t' -f1)
+		up_name=$(echo centroid_$up_num)
+	else
+		up_name=$(echo NA)
+	fi
+
+
+	if [ ! -z "$downstream_gene_id" ]
+	then
+		down_num=$(grep -F "${downstream_gene_id}" /mnt/iusers01/pb01/f99731hc/scratch/imperial/matchtable.txt | cut -d$'\t' -f1)
+		down_name=$(echo centroid_$down_num)
+	else
+		down_name=$(echo NA)
+	fi
+	# Save result
+	echo "${PREFIX},${up_name},${down_name}" >> synteny.summary
+	
+	if [ $up_name == "centroid_382" ] && [ $down_name == "centroid_383" ]
+	then
+		echo "$line" >> synt38x.bed
+	elif [ $up_name == "centroid_9690" ] && [ $down_name == "centroid_9692" ]
+	then
+		echo "$line" >> synt969x.bed
+	else
+		echo "$line" >> syntUx.bed
+	fi
+	
+done <tir_orf_tir.orf.bed
+#### DATA ####
+synt38total=$(cat synt38x.bed | wc -l)
+synt969total=$(cat synt969x.bed | wc -l)
+syntUtotal=$(cat syntUx.bed | wc -l)
+##############
+
 # 9) SAVE ALL OF THE SEQUENCE INFO
 conda activate bedtools_env
 # ORF/loci with flanks
@@ -270,7 +327,10 @@ bedtools getfasta -s -fo tir_unknownorf_tir.all.loc.fa -fi $GENOME -bed tir_uorf
 bedtools getfasta -s -fo tir_orf_tir.flank.fa -fi $GENOME -bed tir_orf_tir.flank.bed
 bedtools getfasta -s -fo start.flank.fa -fi $GENOME -bed start.flank.bed
 bedtools getfasta -s -fo end.flank.fa -fi $GENOME -bed end.flank.bed
-
+# Syntenic grouping
+bedtools getfasta -s -fo x38.synt.fa -fi $GENOME -bed synt38x.bed
+bedtools getfasta -s -fo x969.synt.fa -fi $GENOME -bed synt969x.bed
+bedtools getfasta -s -fo ux.synt.fa -fi $GENOME -bed syntUx.bed
 
 
 sed -i "s/>/>${PREFIX}_/g" tir_orf_tir.orf.fa
@@ -280,7 +340,33 @@ sed -i "s/>/>${PREFIX}_/g" tir_unknownorf_tir.all.loc.fa
 sed -i "s/>/>${PREFIX}_/g" tir_orf_tir.flank.fa
 sed -i "s/>/>${PREFIX}_/g" start.flank.fa
 sed -i "s/>/>${PREFIX}_/g" end.flank.fa
+sed -i "s/>/>${PREFIX}_/g" x38.synt.fa
+sed -i "s/>/>${PREFIX}_/g" x969.synt.fa
+sed -i "s/>/>${PREFIX}_/g" ux.synt.fa
 
 # 10) SAVE ALL THE DESCRIPTION INFO
-echo "${PREFIX},${tir_total},${tir_full},${tir_partial},${orf_total},${tir_flank_total},${tir_orf_tir_total},${orf_no_flank_total},${possorf_flank_total},${uorf_flank_total},${urof_flank_single_dir},${urof_flank_multi_dir},${nuorf_flank_total}" > atf4.summary
+echo "${PREFIX},${tir_total},${tir_full},${tir_partial},${orf_total},${tir_flank_total},${tir_orf_tir_total},${orf_no_flank_total},${possorf_flank_total},${uorf_flank_total},${urof_flank_single_dir},${urof_flank_multi_dir},${nuorf_flank_total},${synt38total},${synt969total},${syntUtotal}" > atf4.summary
 
+
+# 11) CREATE A PIDENT MATRIX FOR EACH TIR-AFT4-TIR SEQUENCE
+conda activate emboss_env
+if [ -e x38.synt.fa ]
+then
+	x38_pident=$(needle /mnt/iusers01/pb01/f99731hc/scratch/imperial/origin_atf4.fa x38.synt.fa -auto Y -stdout Y | grep Identity | cut -d"(" -f2 | sed 's/%.*//g')
+else
+	x38_pident=$(echo 0)
+fi
+
+if [ -e x969.synt.fa ]
+then
+	x969_pident=$(needle /mnt/iusers01/pb01/f99731hc/scratch/imperial/origin_atf4.fa x969.synt.fa -auto Y -stdout Y | grep Identity | cut -d"(" -f2 | sed 's/%.*//g')
+else
+	x969_pident=$(echo 0)
+fi
+if [ -e ux.synt.fa ]
+then
+	ux_pident=$(needle /mnt/iusers01/pb01/f99731hc/scratch/imperial/origin_atf4.fa ux.synt.fa -auto Y -stdout Y | grep Identity | cut -d"(" -f2 | sed 's/%.*//g')
+else
+	ux_pident=$(echo 0)
+fi
+echo "${PREFIX},${x38_pident},${x969_pident},${ux_pident}" > pident.summary

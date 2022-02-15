@@ -1,0 +1,64 @@
+#!/bin/bash --login
+#$ -cwd
+#$ -t 1-1
+#$ -N zm
+module load apps/binapps/anaconda3/2020.07
+module load tools/env/proxy2 
+
+
+
+
+# Psuedo-code
+$READ1=ARAF001_1_qc.fastq 
+$READ2=ARAF001_2_qc.fastq
+REF=$(echo /mnt/iusers01/pb01/f99731hc/scratch/GCF_000002655.1_ASM265v1_genomic.fna)
+GBF=$(echo /mnt/iusers01/pb01/f99731hc/scratch/GCF_000002655.1_ASM265v1_genomic.gbff)
+# ALIGN TO REFERENCE
+conda activate bwa_env
+bwa index $REF
+bwa mem $REF $READ1 $READ1  > aln-pe.sam
+
+# CONVERT SAM TO BAM AND SORT	
+conda activate lncrna
+samtools view -S -b aln-pe.sam > aln-pe.bam
+samtools sort -@ $NSLOTS -o aln-pe.sorted.bam aln-pe.bam
+
+
+
+# PERFORM GATK ANALYSIS
+gatk CreateSequenceDictionary -R $REF
+# Add groups for sorted BAM file
+gatk --java-options "-Xmx4G" AddOrReplaceReadGroups \
+       -I aln-pe.sorted.bam \
+       -O aln-pe.grouped.bam \
+       --RGID 4 \
+       --RGLB lib1 \
+       --RGPL ILLUMINA \
+       --RGPU unit1 \
+       --RGSM 20
+# Index the sorted BAM file
+samtools index aln-pe.grouped.bam
+# Run GATK
+gatk --java-options "-Xmx4G" HaplotypeCaller \
+    -R $REF \
+    -I aln-pe.grouped.bam \
+    -O aln-pe.gatk.vcf   
+# Filter GATK results
+gatk VariantFiltration \
+   -R $REF \
+   -V aln-pe.gatk.vcf \
+   -O aln-pe.filtered.gatk.vcf \
+   --filterExpression "DP < 10 || MQ < 40.0 || QD < 2.0 || FS > 60.0 || ABHom < 0.9" \
+   --filterName "confidence_filter"     
+
+
+: <<'END'
+gatk --java-options "-Xmx4G" VariantsToTable \
+     -V aln-pe.filtered.gatk.vcf  \
+     -F CHROM -F POS -F TYPE -F REF -F ALT \
+     -O aln-pe.gatk.tab 
+END
+
+# MAP SNPS TO GENES
+conda activate vcf_env
+vcf-annotator --output annotated.filtered.gatk.vcf aln-pe.filtered.gatk.vcf $GBF
